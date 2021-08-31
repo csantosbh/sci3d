@@ -29,7 +29,7 @@ from nanogui import Color, ColorPicker, Screen, Window, GroupLayout, \
                     VScrollPanel, ImagePanel, ImageView, ComboBox, \
                     ProgressBar, Slider, TextBox, ColorWheel, Graph, \
                     GridLayout, Alignment, Orientation, TabWidget, \
-                    IntBox, RenderPass, Shader, Texture, Matrix4f, \
+                    IntBox, RenderPass, Shader, Texture, Texture3D, Matrix4f, \
                     Vector2i, Canvas, Theme
 
 import numpy
@@ -141,24 +141,98 @@ class TestApp(Screen):
         #version 330
         uniform mat4 mvp;
         in vec3 position;
-        // TODO
-        //in vec2 uv_in;
         out vec2 uv;
         void main() {
             gl_Position = mvp * vec4(position, 1.0);
-            // TODO
-            //uv = uv_in;
             uv = (position.xy * 0.5) + 0.5;
         }"""
 
         fragment_shader = """
         #version 330
+        //#define CAMERA_ORTHOGONAL
         in vec2 uv;
         out vec4 color;
-        uniform sampler2D my_volume;
+
+        uniform sampler3D scalar_field;
+        uniform mat4 mv;
+        uniform float image_resolution;
+        
+        vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
+            vec3 ray_pos = start;
+            float step_size = 2.0 / image_resolution;
+
+            float sdf;
+            float was_ray_previously_outside = 1;
+            
+            for(int i = 0; i < image_resolution / 2; ++i) {
+                sdf = texture(scalar_field, ray_pos).r;
+                float is_ray_outside = float(sdf >= 0);
+                float step_direction = mix(-1, 1, is_ray_outside);
+                float ray_crossed_isocurve = float(
+                    is_ray_outside != was_ray_previously_outside
+                );
+                step_size = mix(step_size, step_size * 0.5, ray_crossed_isocurve);
+                was_ray_previously_outside = is_ray_outside;
+                ray_pos += step_direction * ray_direction * step_size;
+            }
+            return vec4(ray_pos, sdf);
+        }
+        
+        float derivative(vec3 pos, vec3 eps) {
+            return texture(scalar_field, pos + eps).r -
+                   texture(scalar_field, pos - eps).r;
+        }
+        
+        vec3 gradient(vec3 pos) {
+            float eps = 1.0 / image_resolution;
+            
+            float dx = derivative(pos, vec3(eps, 0, 0));
+            float dy = derivative(pos, vec3(0, eps, 0));
+            float dz = derivative(pos, vec3(0, 0, eps));
+
+            return vec3(dx, dy, dz);
+        }
+        
         void main() {
-            float tex = texture2D(my_volume, uv).r;
-            color.rgb = vec3(tex);
+            vec3 curr_pos_l = vec3(uv, 0.0);
+            vec3 curr_pos_w = (mv * vec4(curr_pos_l, 1)).xyz;
+            
+            // Light
+            vec3 light_pos = (mv * vec4(0.5, 0.5, 0, 1)).xyz;
+            vec3 light_color = vec3(0.5, 0.2, 0.2);
+
+            // Discard fragment if inside volume
+            if (sign(texture(scalar_field, curr_pos_w.xyz).r) < 0)
+                discard;
+            
+            // Setup camera
+#if defined(CAMERA_ORTHOGONAL)
+            // orthogonal
+            vec4 curr_dir = mv * vec4(0, 0, 1, 0);
+#else
+            // perspective
+            float focal_length = 1.0;
+            vec4 curr_dir = mv * vec4(
+                normalize(curr_pos_l - vec3(0.5, 0.5, -focal_length)),
+                0
+            );
+#endif
+
+            // Get surface geometry
+            vec4 iso_intersection = intersect_isocurve_0(curr_pos_w, curr_dir.xyz); 
+            vec3 surface_pos = iso_intersection.xyz;
+            float sdf_value = iso_intersection.w;
+            float eps = 1e-1;
+            if (abs(iso_intersection.w) > eps) discard;
+            vec3 normal = normalize(gradient(surface_pos));
+
+            // Apply lighting
+            vec3 surface_to_light = light_pos - surface_pos;
+            float s2l_distance = length(surface_to_light);
+            float lambertian_intensity = dot(
+                normal, normalize(surface_to_light)
+            ) / s2l_distance;
+            color.rgb = lambertian_intensity * light_color;
         }"""
 
         self.shader = Shader(
@@ -179,16 +253,27 @@ class TestApp(Screen):
         ))
         self._texture = None
         self.get_dummy_texture()
-        self.shader.set_texture("my_volume", self._texture)
+        self.shader.set_texture3d("scalar_field", self._texture)
 
     def get_dummy_texture(self):
-        buff = np.mgrid[0:1:128j, 0:1:128j][0].astype(np.float32)
-        self._texture = Texture(
+        buff = np.mgrid[-1:1:32j, -1:1:32j, -1:1:32j].astype(np.float32)
+        sdf = np.linalg.norm(buff, 2, 0) - 0.5
+        """
+        sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
+        sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
+        """
+
+        # Invert SDF sign if it is negative outside
+        sdf = sdf * np.sign(sdf[0, 0, 0])
+
+        self._texture = Texture3D(
             Texture.PixelFormat.R,
             Texture.ComponentFormat.Float32,
-            buff.shape
+            sdf.shape,
+            wrap_mode=Texture.WrapMode.ClampToEdge
         )
-        self._texture.upload(buff)
+        self._texture.upload(sdf)
+        self.shader.set_buffer("image_resolution", np.array(sdf.shape[0], dtype=np.float32))
         return self._texture
 
     def draw(self, ctx):
@@ -200,10 +285,14 @@ class TestApp(Screen):
         self.render_pass.resize(self.framebuffer_size())
 
         s = self.size()
+        view_scale = Matrix4f.scale([1, s[0] / s[1], 1]) if s[0] > s[1] \
+            else Matrix4f.scale([s[1] / s[0], 1, 1])
         with self.render_pass:
-            mvp = Matrix4f.scale([s[1] / float(s[0]) * 0.25, 0.25, 0.25]) @ \
-                  Matrix4f.rotate([0, 0, 1], glfw.getTime())
+            mvp = view_scale @ Matrix4f.rotate([0, 0, 1], 0)
             self.shader.set_buffer("mvp", np.float32(mvp).T)
+            t = (glfw.getTime())
+            mv = Matrix4f.translate([0.5, 0.5, 0.5]) @ Matrix4f.rotate([0, 1, 0], t) @ Matrix4f.translate([-0.5, -0.5, -0.5])
+            self.shader.set_buffer("mv", np.float32(mv).T)
             with self.shader:
                 self.shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
@@ -211,7 +300,6 @@ class TestApp(Screen):
         if super(TestApp, self).keyboard_event(key, scancode,
                                                action, modifiers):
             return True
-        ic(f'keyboard {key}, {action}, {modifiers}')
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
             self.set_visible(False)
             return True
