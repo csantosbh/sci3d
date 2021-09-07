@@ -49,10 +49,11 @@ class Tooltip(Window):
                  tip_color=Color(48, 48, 48, 255)):
         super(Tooltip, self).__init__(parent, "")
         self._mouse_drag_last = None
-        self._tip_position = tip_position
+        self.tip_position = tip_position
         self._margin = (5, 5)
         self._tip_color = tip_color
         self._tip_radius = tip_radius
+        self._is_moving_tip = None
 
         theme = Theme(self.screen().nvg_context())
         theme.m_window_drop_shadow_size = 3
@@ -76,13 +77,24 @@ class Tooltip(Window):
         self.set_size(caption_size)
         pass
 
+    def _is_mouse_over_tip(self, position):
+        return np.linalg.norm(position - self.tip_position) <= self._tip_radius
+
+    def contains(self, position):
+        window_contains = super(Tooltip, self).contains(position)
+        return window_contains or self._is_mouse_over_tip(position)
+
     def mouse_button_event(self, p, button, down, modifiers):
+        self._is_moving_tip = self._is_mouse_over_tip(p)
         self._mouse_drag_last = p
 
     def mouse_drag_event(self, p, rel, button, modifiers):
         dp = p - self._mouse_drag_last
         self._mouse_drag_last = p
-        self.set_position(self.position() + dp)
+        if self._is_moving_tip:
+            self.tip_position += dp
+        else:
+            self.set_position(self.position() + dp)
 
     def draw(self, nvg):
         # Temporarily disable scissoring
@@ -92,15 +104,15 @@ class Tooltip(Window):
         # Draw data point
         nvg.BeginPath()
         nvg.Circle(
-            self._tip_position[0], self._tip_position[1], self._tip_radius
+            self.tip_position[0], self.tip_position[1], self._tip_radius
         )
         box_center = self.position() + self.size() / 2
-        tip_box_dir = np.array(box_center - self._tip_position)
+        tip_box_dir = np.array(box_center - self.tip_position)
         line_tip_intersection = (
                 tip_box_dir / np.linalg.norm(tip_box_dir) * self._tip_radius
         ).astype(np.int32)
         nvg.MoveTo(*box_center)
-        nvg.LineTo(*(self._tip_position + line_tip_intersection))
+        nvg.LineTo(*(self.tip_position + line_tip_intersection))
         nvg.StrokeColor(self._tip_color)
         nvg.StrokeWidth(2)
 
@@ -127,11 +139,28 @@ class TestApp(Screen):
         super(TestApp, self).__init__((1024, 768), "NanoGUI Test")
         self.shader = None
 
-        self.mytest = Tooltip(self, tip_position=Vector2i(500, 500), tip_label="(3.1415, 2.7100, 0.0000)")
+        self.tooltip = Tooltip(self, tip_position=Vector2i(500, 500), tip_label="(3.1415, 2.7100, 0.0000)")
 
         self.perform_layout()
 
-        self.render_pass = RenderPass([self])
+        self.rt_color = Texture(
+            # TODO we dont need rgba
+            Texture.PixelFormat.RGBA,
+            Texture.ComponentFormat.UInt8,
+            # TODO recreate texture when size changes
+            self.size(),
+            # TODO using shaderread has implications that I'm not sure I want
+            flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
+        )
+        self.rt_position = Texture(
+            Texture.PixelFormat.RGB,
+            Texture.ComponentFormat.Float32,
+            # TODO recreate texture when size changes
+            self.size(),
+            # TODO using shaderread has implications that I'm not sure I want
+            flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
+        )
+        self.render_pass = RenderPass([self.rt_color, self.rt_position], blit_target=self)
         self.render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
 
         # We currently only support opengl
@@ -151,10 +180,11 @@ class TestApp(Screen):
         #version 330
         //#define CAMERA_ORTHOGONAL
         in vec2 uv;
-        out vec4 color;
+        layout(location = 0) out vec4 color;
+        layout(location = 1) out vec4 out_surface_position;
 
         uniform sampler3D scalar_field;
-        uniform mat4 mv;
+        uniform mat4 object2camera;
         uniform float image_resolution;
         
         vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
@@ -182,37 +212,36 @@ class TestApp(Screen):
             return texture(scalar_field, pos + eps).r -
                    texture(scalar_field, pos - eps).r;
         }
-        
+
         vec3 gradient(vec3 pos) {
             float eps = 1.0 / image_resolution;
-            
+
             float dx = derivative(pos, vec3(eps, 0, 0));
             float dy = derivative(pos, vec3(0, eps, 0));
             float dz = derivative(pos, vec3(0, 0, eps));
 
             return vec3(dx, dy, dz);
         }
-        
+
         void main() {
             vec3 curr_pos_l = vec3(uv, 0.0);
-            vec3 curr_pos_w = (mv * vec4(curr_pos_l, 1)).xyz;
-            
+            vec3 curr_pos_w = (object2camera * vec4(curr_pos_l, 1)).xyz;
+
             // Light
-            vec3 light_pos = (mv * vec4(0.5, 0.5, 0, 1)).xyz;
+            vec3 light_pos = (object2camera * vec4(0.5, 0.5, 0, 1)).xyz;
             vec3 light_color = vec3(0.5, 0.2, 0.2);
 
-            // Discard fragment if inside volume
-            if (sign(texture(scalar_field, curr_pos_w.xyz).r) < 0)
-                discard;
-            
+            // Hide fragment if inside volume
+            color.a = max(0, sign(texture(scalar_field, curr_pos_w.xyz).r));
+
             // Setup camera
 #if defined(CAMERA_ORTHOGONAL)
             // orthogonal
-            vec4 curr_dir = mv * vec4(0, 0, 1, 0);
+            vec4 curr_dir = object2camera * vec4(0, 0, 1, 0);
 #else
             // perspective
             float focal_length = 1.0;
-            vec4 curr_dir = mv * vec4(
+            vec4 curr_dir = object2camera * vec4(
                 normalize(curr_pos_l - vec3(0.5, 0.5, -focal_length)),
                 0
             );
@@ -222,8 +251,9 @@ class TestApp(Screen):
             vec4 iso_intersection = intersect_isocurve_0(curr_pos_w, curr_dir.xyz); 
             vec3 surface_pos = iso_intersection.xyz;
             float sdf_value = iso_intersection.w;
-            float eps = 1e-1;
-            if (abs(iso_intersection.w) > eps) discard;
+            float eps = 0.1;
+            // Hide pixels that do not contain the isosurface
+            color.a *= smoothstep(2*eps, eps, iso_intersection.w);
             vec3 normal = normalize(gradient(surface_pos));
 
             // Apply lighting
@@ -233,6 +263,8 @@ class TestApp(Screen):
                 normal, normalize(surface_to_light)
             ) / s2l_distance;
             color.rgb = lambertian_intensity * light_color;
+            
+            out_surface_position = vec4(surface_pos, 1);
         }"""
 
         self.shader = Shader(
@@ -240,7 +272,8 @@ class TestApp(Screen):
             # An identifying name
             "A simple shader",
             vertex_shader,
-            fragment_shader
+            fragment_shader,
+            blend_mode=Shader.BlendMode.AlphaBlend
         )
 
         self.shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
@@ -256,9 +289,11 @@ class TestApp(Screen):
         self.shader.set_texture3d("scalar_field", self._texture)
 
     def get_dummy_texture(self):
-        buff = np.mgrid[-1:1:32j, -1:1:32j, -1:1:32j].astype(np.float32)
+        # sphere
+        buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
         sdf = np.linalg.norm(buff, 2, 0) - 0.5
         """
+        # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
         """
@@ -291,12 +326,34 @@ class TestApp(Screen):
             mvp = view_scale @ Matrix4f.rotate([0, 0, 1], 0)
             self.shader.set_buffer("mvp", np.float32(mvp).T)
             t = (glfw.getTime())
-            mv = Matrix4f.translate([0.5, 0.5, 0.5]) @ Matrix4f.rotate([0, 1, 0], t) @ Matrix4f.translate([-0.5, -0.5, -0.5])
-            self.shader.set_buffer("mv", np.float32(mv).T)
+            object2camera = Matrix4f.translate([0.5, 0.5, 0.5]) @ Matrix4f.rotate([0, 1, 0], t) @ Matrix4f.translate([-0.5, -0.5, -0.5])
+            self.shader.set_buffer("object2camera", np.float32(object2camera).T)
             with self.shader:
                 self.shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
+        # Update tooltip
+        if self.contains(self.tooltip.tip_position):
+            rt_pos_data = self.rt_position.download()
+            tooltip_sdf_val_c = np.concatenate([rt_pos_data[
+                self.tooltip.tip_position[1],
+                self.tooltip.tip_position[0],
+                :
+            ], [1]])
+            tooltip_sdf_val_w = np.matmul(np.linalg.inv(object2camera), tooltip_sdf_val_c)
+            self.tooltip.set_caption(
+                f'({tooltip_sdf_val_w[0]:.4f}, '
+                f'{tooltip_sdf_val_w[1]:.4f}, '
+                f'{tooltip_sdf_val_w[2]:.4f})'
+            )
+
     def keyboard_event(self, key, scancode, action, modifiers):
+        #screen_tex = self.rt_position.download()
+        #ic(screen_tex.shape, np.min(screen_tex), np.max(screen_tex))
+        #import matplotlib.pyplot as plt
+        #plt.imshow(screen_tex[..., 0:3])
+        #plt.show()
+        #exit()
+
         if super(TestApp, self).keyboard_event(key, scancode,
                                                action, modifiers):
             return True
@@ -305,8 +362,16 @@ class TestApp(Screen):
             return True
         return False
 
+    """
+    def mouse_button_event(self, p, button, down, modifiers):
+        ic(down)
+        for child_widget in [self.tooltip]:
+            if child_widget.is_mouse_over(p):
+                child_widget.mouse_button_event(p, button, down, modifiers)
+    """
+
     def mouse_motion_event(self, p, rel, button, modifiers):
-        self.mytest.set_caption(f'({p[0]}, {p[1]})\nok')
+        #self.tooltip.set_caption(f'({p[0]}, {p[1]})\nok')
         pass
 
 
