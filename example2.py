@@ -141,6 +141,7 @@ class TestApp(Screen):
         self.shader = None
 
         self.tooltip = Tooltip(self, tip_position=Vector2i(500, 500), tip_label="(3.1415, 2.7100, 0.0000)")
+        self._scale_power = 0
 
         self.perform_layout()
 
@@ -170,11 +171,14 @@ class TestApp(Screen):
         vertex_shader = """
         #version 330
         uniform mat4 mvp;
+        uniform float scale_factor;
+        
         in vec3 position;
         out vec2 uv;
+        
         void main() {
             gl_Position = mvp * vec4(position, 1.0);
-            uv = (position.xy * 0.5) + 0.5;
+            uv = scale_factor * (position.xy * 0.5) + 0.5;
         }"""
 
         fragment_shader = """
@@ -303,6 +307,7 @@ class TestApp(Screen):
         light_pos=np.eye(4, 3).astype(np.float32)
         light_color=np.eye(4, 3).astype(np.float32)
         ic(light_pos)
+        self.shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
         self.shader.set_buffer("light_pos[0]", light_pos.flatten())
         self.shader.set_buffer("light_color[0]", light_color.flatten())
 
@@ -430,6 +435,11 @@ class TestApp(Screen):
             return True
 
         return False
+
+    def scroll_event(self, p, rel):
+        self._scale_power += rel[1]
+        self.shader.set_buffer(
+            "scale_factor", np.array(0.95**self._scale_power, dtype=np.float32))
 
     def mouse_motion_event(self, p, rel, button, modifiers):
         if button == glfw.MOUSE_BUTTON_2:
