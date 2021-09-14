@@ -97,6 +97,8 @@ class Tooltip(Window):
         else:
             self.set_position(self.position() + dp)
 
+        return True
+
     def draw(self, nvg):
         # Temporarily disable scissoring
         nvg.Save()
@@ -442,6 +444,9 @@ class TestApp(Screen):
             "scale_factor", np.array(0.95**self._scale_power, dtype=np.float32))
 
     def mouse_motion_event(self, p, rel, button, modifiers):
+        if super(TestApp, self).mouse_motion_event(p, rel, button, modifiers):
+            return True
+
         if button == glfw.MOUSE_BUTTON_2:
             screen_size = np.max(self.size())/2
             new_fwd = np.array([rel.x/screen_size, -rel.y/screen_size, 1])
