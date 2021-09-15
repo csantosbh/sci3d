@@ -202,21 +202,32 @@ class TestApp(Screen):
             return texture(scalar_field, left_handed_coord).r;
         }
         
-        vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
+        vec3 get_start_near_volume(vec3 start, vec3 ray_direction) {
             // Make rays start at the edge of the volume, even if camera is far away
             vec3 far_corner = vec3(1, 1, -1);
-            vec3 alphas = max(
-                vec3(0), min((-start)/ray_direction, (far_corner-start)/ray_direction)
-            );
-            float initial_displacement = max(alphas.x, max(alphas.y, alphas.z));
+            float alpha = max(0, min((-start.x) / ray_direction.x,
+                                (far_corner.x - start.x) / ray_direction.x));
+            start += alpha * ray_direction;
+            alpha = max(0, min((-start.y) / ray_direction.y,
+                           (far_corner.y - start.y) / ray_direction.y));
+            start += alpha * ray_direction;
+            alpha = max(0, min((-start.z) / ray_direction.z,
+                           (far_corner.z - start.z) / ray_direction.z));
+            start += alpha * ray_direction;
 
-            vec3 ray_pos = start + initial_displacement * ray_direction;
-            float step_size = 2.0 / image_resolution;
+            return start;
+        }
+
+        vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
+            float max_ray_coverage = sqrt(3.0);
+            float step_count = image_resolution * sqrt(3.0);
+            vec3 ray_pos = get_start_near_volume(start, ray_direction);
+            float step_size = max_ray_coverage / step_count;
 
             float sdf;
             float was_ray_previously_outside = 1;
 
-            for(int i = 0; i < image_resolution / 2; ++i) {
+            for(int i = 0; i < step_count; ++i) {
                 sdf = sample_sdf(ray_pos);
                 float is_ray_outside = float(sdf >= 0);
                 float step_direction = mix(-1, 1, is_ray_outside);
@@ -231,8 +242,7 @@ class TestApp(Screen):
         }
 
         float derivative(vec3 pos, vec3 eps) {
-            return sample_sdf(pos + eps) -
-                   sample_sdf(pos - eps);
+            return sample_sdf(pos + eps) - sample_sdf(pos - eps);
         }
 
         vec3 gradient(vec3 pos) {
@@ -244,7 +254,7 @@ class TestApp(Screen):
 
             return vec3(dx, dy, dz);
         }
-        
+
         vec3 apply_lights(vec3 surface_pos, vec3 normal)
         {
             vec3 output_color = vec3(0);
@@ -327,14 +337,16 @@ class TestApp(Screen):
         self._camera_matrix = np.eye(4, dtype=np.float32)
 
     def get_dummy_texture(self):
-        # cube
         """
-        buff = np.mgrid[0:1:64j, 0:1:64j, 0:1:64j].astype(np.float32)
+        # cube
+        buff = np.mgrid[0:1:196j, 0:1:196j, 0:1:196j].astype(np.float32)
         sdf = np.maximum(
             np.maximum(0.5 - buff[0, ...], -0.5 + buff[0, ...]),
             np.maximum(np.maximum(0.5 - buff[1, ...], -0.5 + buff[1, ...]),
                        np.maximum(0.5 - buff[2, ...], -0.5 + buff[2, ...]))
         ) - 0.25
+        """
+        """
         # sphere
         buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
         sdf = np.linalg.norm(buff, 2, 0) - 0.5
@@ -342,7 +354,6 @@ class TestApp(Screen):
         # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
-        #"""
 
         # Invert SDF sign if it is negative outside
         sdf = sdf * np.sign(sdf[0, 0, 0])
@@ -383,12 +394,11 @@ class TestApp(Screen):
         # Update tooltip
         if self.contains(self.tooltip.tip_position):
             rt_pos_data = self.rt_position.download()
-            tooltip_sdf_val_c = np.concatenate([rt_pos_data[
+            tooltip_sdf_val_w = np.concatenate([rt_pos_data[
                 self.tooltip.tip_position[1],
                 self.tooltip.tip_position[0],
                 :
             ], [1]])
-            tooltip_sdf_val_w = np.matmul(np.linalg.inv(self._camera_matrix.T), tooltip_sdf_val_c)
             self.tooltip.set_caption(
                 f'({tooltip_sdf_val_w[0]:.4f}, '
                 f'{tooltip_sdf_val_w[1]:.4f}, '
