@@ -21,6 +21,7 @@ import numpy as np
 import icecream
 
 icecream.install()
+ic.configureOutput(includeContext=True)
 
 import nanogui.nanovg as nanovg
 from nanogui import Color, ColorPicker, Screen, Window, GroupLayout, \
@@ -42,14 +43,16 @@ counter = 1
 class Tooltip(Window):
     def __init__(self,
                  parent,
-                 tip_position,
+                 tip_position_screen,
+                 tip_position_world,
                  tip_label,
                  box_tip_distance=10,
                  tip_radius=4,
                  tip_color=Color(48, 48, 48, 255)):
         super(Tooltip, self).__init__(parent, "")
         self._mouse_drag_last = None
-        self.tip_position = tip_position
+        self.tip_position_screen = tip_position_screen
+        self.tip_position_world = tip_position_world
         self._margin = (5, 5)
         self._tip_color = tip_color
         self._tip_radius = tip_radius
@@ -63,7 +66,7 @@ class Tooltip(Window):
         self.set_caption(tip_label)
 
         curr_size = self.size()
-        self.set_position(tip_position - Vector2i(curr_size[0]//2, box_tip_distance+int(curr_size[1])))
+        self.set_position(tip_position_screen - Vector2i(curr_size[0]//2, box_tip_distance+int(curr_size[1])))
 
     def set_caption(self, caption):
         self.caption = caption
@@ -78,7 +81,7 @@ class Tooltip(Window):
         pass
 
     def _is_mouse_over_tip(self, position):
-        return np.linalg.norm(position - self.tip_position) <= self._tip_radius
+        return np.linalg.norm(position - self.tip_position_screen) <= self._tip_radius
 
     def contains(self, position):
         window_contains = super(Tooltip, self).contains(position)
@@ -93,7 +96,7 @@ class Tooltip(Window):
         dp = p - self._mouse_drag_last
         self._mouse_drag_last = p
         if self._is_moving_tip:
-            self.tip_position += dp
+            self.tip_position_screen += dp
         else:
             self.set_position(self.position() + dp)
 
@@ -107,15 +110,15 @@ class Tooltip(Window):
         # Draw data point
         nvg.BeginPath()
         nvg.Circle(
-            self.tip_position[0], self.tip_position[1], self._tip_radius
+            self.tip_position_screen[0], self.tip_position_screen[1], self._tip_radius
         )
         box_center = self.position() + self.size() / 2
-        tip_box_dir = np.array(box_center - self.tip_position)
+        tip_box_dir = np.array(box_center - self.tip_position_screen)
         line_tip_intersection = (
                 tip_box_dir / np.linalg.norm(tip_box_dir) * self._tip_radius
         ).astype(np.int32)
         nvg.MoveTo(*box_center)
-        nvg.LineTo(*(self.tip_position + line_tip_intersection))
+        nvg.LineTo(*(self.tip_position_screen + line_tip_intersection))
         nvg.StrokeColor(self._tip_color)
         nvg.StrokeWidth(2)
 
@@ -142,7 +145,9 @@ class TestApp(Screen):
         super(TestApp, self).__init__((1024, 768), "NanoGUI Test")
         self.shader = None
 
-        self.tooltip = Tooltip(self, tip_position=Vector2i(500, 500), tip_label="(3.1415, 2.7100, 0.0000)")
+        self.tooltip = Tooltip(
+            self, tip_position_screen=Vector2i(500, 200), tip_position_world=np.zeros((3,)), tip_label="(3.1415, 2.7100, 0.0000)"
+        )
         self._scale_power = 0
 
         self.perform_layout()
@@ -166,6 +171,8 @@ class TestApp(Screen):
         )
         self.render_pass = RenderPass([self.rt_color, self.rt_position], blit_target=self)
         self.render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
+
+        self.rt_pos_data = None
 
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
@@ -220,15 +227,16 @@ class TestApp(Screen):
 
         vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
             float max_ray_coverage = sqrt(3.0);
-            float step_count = image_resolution * sqrt(3.0);
+            float step_count = image_resolution;
             vec3 ray_pos = get_start_near_volume(start, ray_direction);
+            float alpha = 0;
             float step_size = max_ray_coverage / step_count;
 
             float sdf;
             float was_ray_previously_outside = 1;
 
             for(int i = 0; i < step_count; ++i) {
-                sdf = sample_sdf(ray_pos);
+                sdf = sample_sdf(ray_pos + ray_direction * alpha);
                 float is_ray_outside = float(sdf >= 0);
                 float step_direction = mix(-1, 1, is_ray_outside);
                 float ray_crossed_isocurve = float(
@@ -236,9 +244,11 @@ class TestApp(Screen):
                 );
                 step_size = mix(step_size, step_size * 0.5, ray_crossed_isocurve);
                 was_ray_previously_outside = is_ray_outside;
-                ray_pos += step_direction * ray_direction * step_size;
+                alpha += step_direction * step_size;
+
+                if (step_size < 1e-6) break;
             }
-            return vec4(ray_pos, sdf);
+            return vec4(ray_pos + ray_direction * alpha, sdf);
         }
 
         float derivative(vec3 pos, vec3 eps) {
@@ -316,9 +326,8 @@ class TestApp(Screen):
             blend_mode=Shader.BlendMode.AlphaBlend
         )
 
-        light_pos=np.eye(4, 3).astype(np.float32)
-        light_color=np.eye(4, 3).astype(np.float32)
-        ic(light_pos)
+        light_pos = np.eye(4, 3).astype(np.float32)
+        light_color = np.eye(4, 3).astype(np.float32)
         self.shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
         self.shader.set_buffer("light_pos[0]", light_pos.flatten())
         self.shader.set_buffer("light_color[0]", light_color.flatten())
@@ -337,7 +346,6 @@ class TestApp(Screen):
         self._camera_matrix = np.eye(4, dtype=np.float32)
 
     def get_dummy_texture(self):
-        """
         # cube
         buff = np.mgrid[0:1:196j, 0:1:196j, 0:1:196j].astype(np.float32)
         sdf = np.maximum(
@@ -346,14 +354,15 @@ class TestApp(Screen):
                        np.maximum(0.5 - buff[2, ...], -0.5 + buff[2, ...]))
         ) - 0.25
         """
-        """
         # sphere
         buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
         sdf = np.linalg.norm(buff, 2, 0) - 0.5
         """
+        """
         # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
+        """
 
         # Invert SDF sign if it is negative outside
         sdf = sdf * np.sign(sdf[0, 0, 0])
@@ -382,8 +391,7 @@ class TestApp(Screen):
         #)
 
         s = self.size()
-        view_scale = Matrix4f.scale([1, s[0] / s[1], 1]) if s[0] > s[1] \
-            else Matrix4f.scale([s[1] / s[0], 1, 1])
+        view_scale = Matrix4f.scale([1, s[0] / s[1], 1])
         with self.render_pass:
             mvp = view_scale
             self.shader.set_buffer("mvp", np.float32(mvp).T)
@@ -391,12 +399,14 @@ class TestApp(Screen):
             with self.shader:
                 self.shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
-        # Update tooltip
-        if self.contains(self.tooltip.tip_position):
-            rt_pos_data = self.rt_position.download()
-            tooltip_sdf_val_w = np.concatenate([rt_pos_data[
-                self.tooltip.tip_position[1],
-                self.tooltip.tip_position[0],
+        # Initialize world position buffer
+        if self.rt_pos_data is None:
+            self.rt_pos_data = self.rt_position.download()
+
+            # Initialize tooltip
+            tooltip_sdf_val_w = np.concatenate([self.rt_pos_data[
+                self.tooltip.tip_position_screen[1],
+                self.tooltip.tip_position_screen[0],
                 :
             ], [1]])
             self.tooltip.set_caption(
@@ -404,14 +414,16 @@ class TestApp(Screen):
                 f'{tooltip_sdf_val_w[1]:.4f}, '
                 f'{tooltip_sdf_val_w[2]:.4f})'
             )
+            self.tooltip.tip_position_world = tooltip_sdf_val_w
 
     def keyboard_event(self, key, scancode, action, modifiers):
-        #screen_tex = self.rt_position.download()
-        #ic(screen_tex.shape, np.min(screen_tex), np.max(screen_tex))
-        #import matplotlib.pyplot as plt
-        #plt.imshow(screen_tex[..., 0:3])
-        #plt.show()
-        #exit()
+        if super(TestApp, self).keyboard_event(key, scancode,
+                                               action, modifiers):
+            return True
+
+        if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+            self.set_visible(False)
+            return True
 
         self._ctrl_keys = {
             'forward': glfw.KEY_W,
@@ -430,6 +442,8 @@ class TestApp(Screen):
             'down': np.array([[0, -1, 0, 1]], dtype=np.float32).T,
         }
 
+        kb_event_handled = False
+
         for movement, ctrl_key in self._ctrl_keys.items():
             if key == ctrl_key:
                 move_matrix = np.concatenate(
@@ -437,16 +451,13 @@ class TestApp(Screen):
                 move_matrix[3, 3] = 1
                 self._camera_matrix = np.matmul(self._camera_matrix,
                                                 move_matrix)
+                kb_event_handled = True
 
-        if super(TestApp, self).keyboard_event(key, scancode,
-                                               action, modifiers):
-            return True
+        if kb_event_handled:
+            self.update_tooltip_positions()
+            self.rt_pos_data = self.rt_position.download()
 
-        if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
-            self.set_visible(False)
-            return True
-
-        return False
+        return kb_event_handled
 
     def scroll_event(self, p, rel):
         self._scale_power += rel[1]
@@ -457,8 +468,11 @@ class TestApp(Screen):
         if super(TestApp, self).mouse_motion_event(p, rel, button, modifiers):
             return True
 
+        mouse_event_handled = False
+        prev_camera_matrix = self._camera_matrix
+
         if button == glfw.MOUSE_BUTTON_2:
-            screen_size = np.max(self.size())/2
+            screen_size = np.max(self.size()) / 2
             new_fwd = np.array([rel.x/screen_size, -rel.y/screen_size, 1])
             new_fwd = new_fwd / np.linalg.norm(new_fwd)
             identity_up = np.array([0, 1, 0])
@@ -472,8 +486,39 @@ class TestApp(Screen):
                 self._camera_matrix,
                 rot_mat
             )
-            pass
-        pass
+
+            mouse_event_handled = True
+
+        if mouse_event_handled:
+            self.update_tooltip_positions()
+            self.rt_pos_data = self.rt_position.download()
+
+        return mouse_event_handled
+
+    def update_tooltip_positions(self):
+        # Create camera matrix
+        window_size = self.size()
+        focal_length = 1
+        projection_matrix = np.array([
+            [focal_length * window_size[0], 0, 0, 0],
+            [0, focal_length * window_size[0], 0, 0],
+            [0, 0, window_size[0], 0],
+            [0, 0, -1, 0],
+        ])
+        # Bring tip coordinate from world to camera space
+        focal_center = np.array([0.5, 0.5, focal_length, 0])
+        tip_pos = np.linalg.inv(
+            self._camera_matrix) @ self.tooltip.tip_position_world - focal_center
+        # Perform camera projection and homogeneous normalization
+        tip_pos = np.matmul(projection_matrix, tip_pos)
+        tip_pos = tip_pos / tip_pos[-1]
+        # Transform to screen coordinates
+        viewport_matrix = np.array([
+            [1, 0, 0, 0.5 * window_size[0]],
+            [0, -1, 0, 0.5 * window_size[1]],
+        ])
+        tip_pos = viewport_matrix @ tip_pos
+        self.tooltip.tip_position_screen = tip_pos.astype(np.int32)
 
 
 def uithread():
