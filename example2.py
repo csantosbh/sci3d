@@ -92,11 +92,26 @@ class Tooltip(Window):
         self._is_moving_tip = self._is_mouse_over_tip(p)
         self._mouse_drag_last = p
 
+    def set_tip_position_world(self, tip_position_world):
+        self.tip_position_world = tip_position_world
+        self.set_caption(
+            f'({tip_position_world[0]:.4f},'
+            f' {tip_position_world[1]:.4f},'
+            f' {tip_position_world[2]:.4f})'
+        )
+
     def mouse_drag_event(self, p, rel, button, modifiers):
         dp = p - self._mouse_drag_last
         self._mouse_drag_last = p
         if self._is_moving_tip:
             self.tip_position_screen += dp
+            # Update world position and label
+            tip_position_world = np.concatenate([self.parent().rt_pos_data[
+                self.tip_position_screen[1],
+                self.tip_position_screen[0],
+                :
+            ], [1]])
+            self.set_tip_position_world(tip_position_world)
         else:
             self.set_position(self.position() + dp)
 
@@ -404,17 +419,12 @@ class TestApp(Screen):
             self.rt_pos_data = self.rt_position.download()
 
             # Initialize tooltip
-            tooltip_sdf_val_w = np.concatenate([self.rt_pos_data[
+            tip_position_world = np.concatenate([self.rt_pos_data[
                 self.tooltip.tip_position_screen[1],
                 self.tooltip.tip_position_screen[0],
                 :
             ], [1]])
-            self.tooltip.set_caption(
-                f'({tooltip_sdf_val_w[0]:.4f}, '
-                f'{tooltip_sdf_val_w[1]:.4f}, '
-                f'{tooltip_sdf_val_w[2]:.4f})'
-            )
-            self.tooltip.tip_position_world = tooltip_sdf_val_w
+            self.tooltip.set_tip_position_world(tip_position_world)
 
     def keyboard_event(self, key, scancode, action, modifiers):
         if super(TestApp, self).keyboard_event(key, scancode,
