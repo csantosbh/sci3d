@@ -377,7 +377,7 @@ class TestApp(Screen):
         # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
-        """
+        #"""
 
         # Invert SDF sign if it is negative outside
         sdf = sdf * np.sign(sdf[0, 0, 0])
@@ -473,6 +473,7 @@ class TestApp(Screen):
         self._scale_power += rel[1]
         self.shader.set_buffer(
             "scale_factor", np.array(0.95**self._scale_power, dtype=np.float32))
+        self.update_tooltip_positions()
 
     def mouse_motion_event(self, p, rel, button, modifiers):
         if super(TestApp, self).mouse_motion_event(p, rel, button, modifiers):
@@ -509,6 +510,7 @@ class TestApp(Screen):
         # Create camera matrix
         window_size = self.size()
         focal_length = 1
+        scale_factor = np.array(0.95**self._scale_power, dtype=np.float32)
         projection_matrix = np.array([
             [focal_length * window_size[0], 0, 0, 0],
             [0, focal_length * window_size[0], 0, 0],
@@ -524,8 +526,8 @@ class TestApp(Screen):
         tip_pos = tip_pos / tip_pos[-1]
         # Transform to screen coordinates
         viewport_matrix = np.array([
-            [1, 0, 0, 0.5 * window_size[0]],
-            [0, -1, 0, 0.5 * window_size[1]],
+            [1./scale_factor, 0, 0, 0.5 * window_size[0]],
+            [0, -1./scale_factor, 0, 0.5 * window_size[1]],
         ])
         tip_pos = viewport_matrix @ tip_pos
         self.tooltip.tip_position_screen = tip_pos.astype(np.int32)
