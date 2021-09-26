@@ -45,7 +45,6 @@ class Tooltip(Window):
                  parent,
                  tip_position_screen,
                  tip_position_world,
-                 tip_label,
                  box_tip_distance=10,
                  tip_radius=4,
                  tip_color=Color(48, 48, 48, 255)):
@@ -63,7 +62,7 @@ class Tooltip(Window):
         self.set_theme(theme)
         self.caption = None
         self.caption_bounds = None
-        self.set_caption(tip_label)
+        self.set_caption(self._build_caption())
 
         curr_size = self.size()
         self.set_position(tip_position_screen - Vector2i(curr_size[0]//2, box_tip_distance+int(curr_size[1])))
@@ -92,13 +91,16 @@ class Tooltip(Window):
         self._is_moving_tip = self._is_mouse_over_tip(p)
         self._mouse_drag_last = p
 
+        return True
+
+    def _build_caption(self):
+        return (f'({self.tip_position_world[0]:.4f},'
+                f' {self.tip_position_world[1]:.4f},'
+                f' {self.tip_position_world[2]:.4f})')
+
     def set_tip_position_world(self, tip_position_world):
         self.tip_position_world = tip_position_world
-        self.set_caption(
-            f'({tip_position_world[0]:.4f},'
-            f' {tip_position_world[1]:.4f},'
-            f' {tip_position_world[2]:.4f})'
-        )
+        self.set_caption(self._build_caption())
 
     def mouse_drag_event(self, p, rel, button, modifiers):
         dp = p - self._mouse_drag_last
@@ -156,15 +158,45 @@ class Tooltip(Window):
 
 
 class TestApp(Screen):
+    def setup_toolbar(self):
+        window = Window(self, "")
+        window.set_position((0, 0))
+
+        toolbar = Widget(window)
+        toolbar.set_layout(BoxLayout(Orientation.Horizontal, Alignment.Middle, 0, 6))
+
+        def create_tooltip(p, button, down, modifiers):
+            if down:
+                make_tooltip_btn.set_pushed(False)
+                tip_position_world = np.concatenate([
+                    self.rt_pos_data[p[1], p[0], :],
+                    [1]
+                ])
+                tooltip = Tooltip(
+                    self, tip_position_screen=p, tip_position_world=tip_position_world
+                )
+                self._tooltips.append(tooltip)
+                self._handle_mouse_down = None
+
+        def cbk_handler():
+            self._handle_mouse_down = create_tooltip
+
+        make_tooltip_btn = ToolButton(toolbar, icons.FA_CROSSHAIRS)
+        make_tooltip_btn.set_callback(cbk_handler)
+
+        self.perform_layout()
+        btn_size = make_tooltip_btn.size()
+        window.set_size((self.size()[0], btn_size[1]))
+
     def __init__(self):
         super(TestApp, self).__init__((1024, 768), "NanoGUI Test")
         self.shader = None
+        self._handle_mouse_down = None
 
-        self.tooltip = Tooltip(
-            self, tip_position_screen=Vector2i(500, 200), tip_position_world=np.zeros((3,)), tip_label="(3.1415, 2.7100, 0.0000)"
-        )
+        self._tooltips = []
         self._scale_power = 0
 
+        self.setup_toolbar()
         self.perform_layout()
 
         self.rt_color = Texture(
@@ -360,6 +392,14 @@ class TestApp(Screen):
         self.shader.set_texture3d("scalar_field", self._texture)
         self._camera_matrix = np.eye(4, dtype=np.float32)
 
+    def mouse_button_event(self, p, button, down, modifiers):
+        super(TestApp, self).mouse_button_event(p, button, down, modifiers)
+
+        if self._handle_mouse_down:
+            self._handle_mouse_down(p, button, down, modifiers)
+
+        return True
+
     def get_dummy_texture(self):
         # cube
         buff = np.mgrid[0:1:196j, 0:1:196j, 0:1:196j].astype(np.float32)
@@ -419,12 +459,6 @@ class TestApp(Screen):
             self.rt_pos_data = self.rt_position.download()
 
             # Initialize tooltip
-            tip_position_world = np.concatenate([self.rt_pos_data[
-                self.tooltip.tip_position_screen[1],
-                self.tooltip.tip_position_screen[0],
-                :
-            ], [1]])
-            self.tooltip.set_tip_position_world(tip_position_world)
 
     def keyboard_event(self, key, scancode, action, modifiers):
         if super(TestApp, self).keyboard_event(key, scancode,
@@ -480,7 +514,6 @@ class TestApp(Screen):
             return True
 
         mouse_event_handled = False
-        prev_camera_matrix = self._camera_matrix
 
         if button == glfw.MOUSE_BUTTON_2:
             screen_size = np.max(self.size()) / 2
@@ -517,20 +550,24 @@ class TestApp(Screen):
             [0, 0, window_size[0], 0],
             [0, 0, -1, 0],
         ])
-        # Bring tip coordinate from world to camera space
         focal_center = np.array([0.5, 0.5, focal_length, 0])
-        tip_pos = np.linalg.inv(
-            self._camera_matrix) @ self.tooltip.tip_position_world - focal_center
-        # Perform camera projection and homogeneous normalization
-        tip_pos = np.matmul(projection_matrix, tip_pos)
-        tip_pos = tip_pos / tip_pos[-1]
-        # Transform to screen coordinates
+        # Transform from world space to camera space
+        world2camera = np.linalg.inv(self._camera_matrix)
+        # Create viewport matrix
         viewport_matrix = np.array([
             [1./scale_factor, 0, 0, 0.5 * window_size[0]],
             [0, -1./scale_factor, 0, 0.5 * window_size[1]],
         ])
-        tip_pos = viewport_matrix @ tip_pos
-        self.tooltip.tip_position_screen = tip_pos.astype(np.int32)
+
+        for tooltip in self._tooltips:
+            # Bring tip coordinate from world to camera space
+            tip_pos = world2camera @ tooltip.tip_position_world - focal_center
+            # Perform camera projection and homogeneous normalization
+            tip_pos = np.matmul(projection_matrix, tip_pos)
+            tip_pos = tip_pos / tip_pos[-1]
+            # Transform to screen coordinates
+            tip_pos = viewport_matrix @ tip_pos
+            tooltip.tip_position_screen = tip_pos.astype(np.int32)
 
 
 def uithread():
