@@ -40,58 +40,116 @@ from nanogui import glfw, icons
 counter = 1
 
 
-class Tooltip(Window):
+class Tooltip(object):
     def __init__(self,
-                 parent,
                  tip_position_screen,
                  tip_position_world,
                  box_tip_distance=10,
                  tip_radius=4,
-                 tip_color=Color(48, 48, 48, 255)):
-        super(Tooltip, self).__init__(parent, "")
-        self._mouse_drag_last = None
+                 tip_color=Color(48, 48, 48, 192),
+                 text_color=Color(255, 255, 255, 255),
+                 nvg_context=None):
+        super(Tooltip, self).__init__()
         self.tip_position_screen = tip_position_screen
         self.tip_position_world = tip_position_world
         self._margin = (5, 5)
         self._tip_color = tip_color
+        self._text_color = text_color
         self._tip_radius = tip_radius
         self._is_moving_tip = None
+        self._is_moving_window = None
+        self._nvg_context = nvg_context
+        self._size = np.zeros((2,))
 
-        theme = Theme(self.screen().nvg_context())
+        # Close icon
+        self._close_icon_size = 10
+        self._close_icon = eval(f'u"\\u{icons.FA_TIMES_CIRCLE:04x}"')
+        # [minx, miny, maxx, maxy]
+        self._close_icon_bounds = None
+        self.destroy_requested_cbks = []
+
+        theme = Theme(self._nvg_context)
         theme.m_window_drop_shadow_size = 3
-        self.set_theme(theme)
         self.caption = None
+        # [minx, miny, maxx, maxy]
         self.caption_bounds = None
         self.set_caption(self._build_caption())
 
-        curr_size = self.size()
-        self.set_position(tip_position_screen - Vector2i(curr_size[0]//2, box_tip_distance+int(curr_size[1])))
+        self._position = tip_position_screen - Vector2i(self._size[0] // 2,
+                                                        box_tip_distance+int(self._size[1]))
 
     def set_caption(self, caption):
+        # Get caption bounds
         self.caption = caption
-        self.caption_bounds = self.screen().nvg_context().TextBoxBounds(
+        self.caption_bounds = self._nvg_context.TextBoxBounds(
             0.0, 0.0, 1e3, self.caption
         )
-        caption_size = (
-            int(self.caption_bounds[2] - self.caption_bounds[0]) + 2*self._margin[0],
+
+        # Get close icon bounds
+        self._nvg_context.Save()
+        self._nvg_context.FontFace("icons")
+        self._nvg_context.FontSize(self._close_icon_size)
+        close_icon_bounds = self._nvg_context.TextBounds(0, 0, self._close_icon)
+        self._nvg_context.Restore()
+
+        self._close_icon_bounds = [
+            self.caption_bounds[2] - close_icon_bounds[0] + 2 * self._margin[0],
+            -self.caption_bounds[1] + self._margin[1],
+            0, 0
+        ]
+        close_icon_size = [
+            int(close_icon_bounds[2] - close_icon_bounds[0]),
+            int(close_icon_bounds[3] - close_icon_bounds[1])
+        ]
+        self._close_icon_bounds[2] = self._close_icon_bounds[0] + close_icon_size[0]
+        self._close_icon_bounds[3] = self._close_icon_bounds[1] + close_icon_size[1]
+
+        # Caption window size
+        self._size = np.array([
+            int(self.caption_bounds[2] - self.caption_bounds[0]) + 3*self._margin[0] + close_icon_size[0],
             int(self.caption_bounds[3] - self.caption_bounds[1]) + 2*self._margin[1]
-        )
-        self.set_size(caption_size)
+        ])
         pass
 
     def _is_mouse_over_tip(self, position):
         return np.linalg.norm(position - self.tip_position_screen) <= self._tip_radius
 
+    def _is_mouse_over_window(self, position):
+        width, height = self._size
+
+        return self._position[0] <= position[0] <= (self._position[0] + width) and \
+               self._position[1] <= position[1] <= (self._position[1] + height)
+
+    def _is_mouse_over_close_icon(self, position):
+        bound_x = [
+            self._position[0] + self._close_icon_bounds[0],
+            self._position[0] + self._close_icon_bounds[2],
+        ]
+        bound_y = [
+            self._position[1] + 2*self._close_icon_bounds[1] - self._close_icon_bounds[3],
+            self._position[1] + self._close_icon_bounds[1],
+        ]
+
+        return bound_x[0] <= position[0] <= bound_x[1] and \
+               bound_y[0] <= position[1] <= bound_y[1]
+
     def contains(self, position):
-        window_contains = super(Tooltip, self).contains(position)
-        return window_contains or self._is_mouse_over_tip(position)
+        #window_contains = super(Tooltip, self).contains(position)
+        return self._is_mouse_over_window(position) or self._is_mouse_over_tip(position)
 
     def mouse_button_event(self, p, button, down, modifiers):
-        super(Tooltip, self).mouse_button_event(p, button, down, modifiers)
-        self._is_moving_tip = self._is_mouse_over_tip(p)
-        self._mouse_drag_last = p
+        #super(Tooltip, self).mouse_button_event(p, button, down, modifiers)
 
-        return True
+        if self._is_mouse_over_close_icon(p):
+            [cbk(self) for cbk in self.destroy_requested_cbks]
+            return True
+        elif down:
+            self._is_moving_tip = self._is_mouse_over_tip(p)
+            self._is_moving_window = self._is_mouse_over_window(p)
+        else:
+            self._is_moving_tip = self._is_moving_window = False
+
+        return self._is_moving_tip or self._is_moving_window
 
     def _build_caption(self):
         return (f'({self.tip_position_world[0]:.4f},'
@@ -102,24 +160,24 @@ class Tooltip(Window):
         self.tip_position_world = tip_position_world
         self.set_caption(self._build_caption())
 
-    def mouse_drag_event(self, p, rel, button, modifiers):
-        dp = p - self._mouse_drag_last
-        self._mouse_drag_last = p
+    def mouse_drag_event(self, p, rel, button, modifiers, rt_pos_data):
         if self._is_moving_tip:
-            self.tip_position_screen += dp
+            self.tip_position_screen += rel
             # Update world position and label
-            tip_position_world = np.concatenate([self.parent().rt_pos_data[
+            tip_position_world = np.concatenate([rt_pos_data[
                 self.tip_position_screen[1],
                 self.tip_position_screen[0],
                 :
             ], [1]])
             self.set_tip_position_world(tip_position_world)
-        else:
-            self.set_position(self.position() + dp)
+        elif self._is_moving_window:
+            self._position = self._position + rel
 
-        return True
+        return self._is_moving_window or self._is_moving_tip
 
-    def draw(self, nvg):
+    def draw(self):
+        nvg = self._nvg_context
+
         # Temporarily disable scissoring
         nvg.Save()
         nvg.Reset()
@@ -129,7 +187,7 @@ class Tooltip(Window):
         nvg.Circle(
             self.tip_position_screen[0], self.tip_position_screen[1], self._tip_radius
         )
-        box_center = self.position() + self.size() / 2
+        box_center = self._position + self._size / 2
         tip_box_dir = np.array(box_center - self.tip_position_screen)
         line_tip_intersection = (
                 tip_box_dir / np.linalg.norm(tip_box_dir) * self._tip_radius
@@ -143,27 +201,47 @@ class Tooltip(Window):
         nvg.Stroke()
         nvg.Restore()
 
-        super(Tooltip, self).draw(nvg)
+        #super(Tooltip, self).draw(nvg)
+        nvg.BeginPath()
+        nvg.Rect(*self._position, *self._size)
+        nvg.FillColor(self._tip_color)
+        nvg.Fill()
 
         # Draw text
         nvg.BeginPath()
-        curr_pos = self.position()
+        nvg.FillColor(self._text_color)
+        curr_pos = self._position
         nvg.TextBox(
-            curr_pos[0]-self.caption_bounds[0] + self._margin[0],
-            curr_pos[1]-self.caption_bounds[1] + self._margin[1],
+            curr_pos[0] - self.caption_bounds[0] + self._margin[0],
+            curr_pos[1] - self.caption_bounds[1] + self._margin[1],
             1e3,
             self.caption
         )
+
+        # Draw close button
+        nvg.Save()
+        nvg.FontFace("icons")
+        nvg.FontSize(self._close_icon_size)
+        nvg.TextBox(
+            curr_pos[0] + self._close_icon_bounds[0],
+            curr_pos[1] + self._close_icon_bounds[1],
+            1e3,
+            self._close_icon
+        )
+        nvg.Restore()
+
         nvg.Stroke()
 
 
 class TestApp(Screen):
     def setup_toolbar(self):
-        window = Window(self, "")
-        window.set_position((0, 0))
+        self._toolbar = Window(self, "")
+        self._toolbar.set_position((0, 0))
 
-        toolbar = Widget(window)
-        toolbar.set_layout(BoxLayout(Orientation.Horizontal, Alignment.Middle, 0, 6))
+        toolbar = Widget(self._toolbar)
+        padding = 2
+        layout = BoxLayout(Orientation.Horizontal, Alignment.Middle, padding, 6)
+        toolbar.set_layout(layout)
 
         def create_tooltip(p, button, down, modifiers):
             if down:
@@ -173,8 +251,10 @@ class TestApp(Screen):
                     [1]
                 ])
                 tooltip = Tooltip(
-                    self, tip_position_screen=p, tip_position_world=tip_position_world
+                    tip_position_screen=p, tip_position_world=tip_position_world,
+                    nvg_context=self.nvg_context()
                 )
+                tooltip.destroy_requested_cbks.append(lambda tt: self._tooltips.remove(tt))
                 self._tooltips.append(tooltip)
                 self._handle_mouse_down = None
 
@@ -186,13 +266,14 @@ class TestApp(Screen):
 
         self.perform_layout()
         btn_size = make_tooltip_btn.size()
-        window.set_size((self.size()[0], btn_size[1]))
+        self._toolbar.set_size((2*padding + self.size()[0], 2*padding + btn_size[1]))
 
     def __init__(self):
         super(TestApp, self).__init__((1024, 768), "NanoGUI Test")
         self.shader = None
         self._handle_mouse_down = None
 
+        self._toolbar = None
         self._tooltips = []
         self._scale_power = 0
 
@@ -395,6 +476,12 @@ class TestApp(Screen):
     def mouse_button_event(self, p, button, down, modifiers):
         super(TestApp, self).mouse_button_event(p, button, down, modifiers)
 
+        for tooltip in self._tooltips:
+            if tooltip.contains(p):
+                handled = tooltip.mouse_button_event(p, button, down, modifiers)
+                if handled:
+                    return True
+
         if self._handle_mouse_down:
             self._handle_mouse_down(p, button, down, modifiers)
 
@@ -434,6 +521,12 @@ class TestApp(Screen):
 
     def draw(self, ctx):
         super(TestApp, self).draw(ctx)
+        for tooltip in self._tooltips:
+            tooltip.draw()
+
+    def resize_event(self, size):
+        super(TestApp, self).resize_event(size)
+        self._toolbar.set_size((size[0], self._toolbar.size()[1]))
 
     def draw_contents(self):
         if self.shader is None:
@@ -512,6 +605,11 @@ class TestApp(Screen):
     def mouse_motion_event(self, p, rel, button, modifiers):
         if super(TestApp, self).mouse_motion_event(p, rel, button, modifiers):
             return True
+
+        for tooltip in self._tooltips:
+            handled = tooltip.mouse_drag_event(p, rel, button, modifiers, self.rt_pos_data)
+            if handled:
+                return True
 
         mouse_event_handled = False
 
