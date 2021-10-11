@@ -528,6 +528,9 @@ class TestApp(Screen):
         super(TestApp, self).resize_event(size)
         self._toolbar.set_size((size[0], self._toolbar.size()[1]))
 
+        self.update_tooltip_positions()
+        self.rt_pos_data = self.rt_position.download()
+
     def draw_contents(self):
         if self.shader is None:
             return
