@@ -171,7 +171,7 @@ class Tooltip(object):
 
     def _update_tip_position_world(self):
         self._tip_position_world = np.concatenate([
-            self._parent_screen.rt_pos_data[self._tip_position_screen[1],
+            self._parent_screen.depth_buffer[self._tip_position_screen[1],
             self._tip_position_screen[0], :],
             [1]
         ])

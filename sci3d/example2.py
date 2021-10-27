@@ -19,49 +19,29 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 
 
 class Sci3DWindow(Screen):
-    def setup_toolbar(self):
-        self._toolbar = Window(self, "")
-        self._toolbar.set_position((0, 0))
+    @property
+    def depth_buffer(self):
+        return self._rt_pos_data
 
-        toolbar = Widget(self._toolbar)
-        padding = 2
-        layout = BoxLayout(Orientation.Horizontal, Alignment.Middle, padding, 6)
-        toolbar.set_layout(layout)
+    def __init__(self, size=(1024, 768), title='Sci3D'):
+        super(Sci3DWindow, self).__init__(size, title)
 
-        def create_tooltip(p, button, down, modifiers):
-            if down:
-                make_tooltip_btn.set_pushed(False)
-                tooltip = Tooltip(
-                    tip_position_screen=p,
-                    parent_screen=self,
-                    on_destroy_cbk=lambda tt: self._tooltips.remove(tt)
-                )
-                self._tooltips.append(tooltip)
-                self._handle_mouse_down = None
-
-        def cbk_handler():
-            self._handle_mouse_down = create_tooltip
-
-        make_tooltip_btn = ToolButton(toolbar, icons.FA_CROSSHAIRS)
-        make_tooltip_btn.set_callback(cbk_handler)
-
-        self.perform_layout()
-        btn_size = make_tooltip_btn.size()
-        self._toolbar.set_size((2*padding + self.size()[0], 2*padding + btn_size[1]))
-
-    def __init__(self):
-        super(Sci3DWindow, self).__init__((1024, 768), "NanoGUI Test")
-        self.shader = None
+        # Events
         self._handle_mouse_down = None
 
+        # Rendering
+        self._shader = None
+
+        # UI
         self._toolbar = None
         self._tooltips = []
         self._scale_power = 0
 
-        self.setup_toolbar()
+        self._setup_toolbar()
         self.perform_layout()
 
-        self.rt_color = Texture(
+        ic(self.size())
+        self._rt_color = Texture(
             # TODO we dont need rgba
             Texture.PixelFormat.RGBA,
             Texture.ComponentFormat.UInt8,
@@ -70,7 +50,7 @@ class Sci3DWindow(Screen):
             # TODO using shaderread has implications that I'm not sure I want
             flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
         )
-        self.rt_position = Texture(
+        self._rt_position = Texture(
             Texture.PixelFormat.RGB,
             Texture.ComponentFormat.Float32,
             # TODO recreate texture when size changes
@@ -78,10 +58,10 @@ class Sci3DWindow(Screen):
             # TODO using shaderread has implications that I'm not sure I want
             flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
         )
-        self.render_pass = RenderPass([self.rt_color, self.rt_position], blit_target=self)
-        self.render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
+        self._render_pass = RenderPass([self._rt_color, self._rt_position], blit_target=self)
+        self._render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
 
-        self.rt_pos_data = None
+        self._rt_pos_data = None
 
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
@@ -92,10 +72,9 @@ class Sci3DWindow(Screen):
         with open('shaders/isosurface_frag.glsl') as f:
             fragment_shader = f.read()
 
-        self.shader = Shader(
-            self.render_pass,
-            # An identifying name
-            "A simple shader",
+        self._shader = Shader(
+            self._render_pass,
+            "isosurface",
             vertex_shader,
             fragment_shader,
             blend_mode=Shader.BlendMode.AlphaBlend
@@ -103,12 +82,12 @@ class Sci3DWindow(Screen):
 
         light_pos = np.eye(4, 3).astype(np.float32)
         light_color = np.eye(4, 3).astype(np.float32)
-        self.shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
-        self.shader.set_buffer("light_pos[0]", light_pos.flatten())
-        self.shader.set_buffer("light_color[0]", light_color.flatten())
+        self._shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
+        self._shader.set_buffer("light_pos[0]", light_pos.flatten())
+        self._shader.set_buffer("light_color[0]", light_color.flatten())
 
-        self.shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
-        self.shader.set_buffer("position", np.array(
+        self._shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
+        self._shader.set_buffer("position", np.array(
             [[-1, -1, 0],
              [1, -1, 0],
              [1, 1, 0],
@@ -117,7 +96,7 @@ class Sci3DWindow(Screen):
         ))
         self._texture = None
         self.get_dummy_texture()
-        self.shader.set_texture3d("scalar_field", self._texture)
+        self._shader.set_texture3d("scalar_field", self._texture)
         self._camera_matrix = np.eye(4, dtype=np.float32)
 
     def mouse_button_event(self, p, button, down, modifiers):
@@ -147,7 +126,7 @@ class Sci3DWindow(Screen):
         buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
         sdf = np.linalg.norm(buff, 2, 0) - 0.5
         """
-        """
+        #"""
         # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
@@ -163,7 +142,7 @@ class Sci3DWindow(Screen):
             wrap_mode=Texture.WrapMode.ClampToEdge
         )
         self._texture.upload(sdf)
-        self.shader.set_buffer("image_resolution", np.array(sdf.shape[0], dtype=np.float32))
+        self._shader.set_buffer("image_resolution", np.array(sdf.shape[0], dtype=np.float32))
         return self._texture
 
     def draw(self, ctx):
@@ -175,13 +154,13 @@ class Sci3DWindow(Screen):
         super(Sci3DWindow, self).resize_event(size)
         self._toolbar.set_size((size[0], self._toolbar.size()[1]))
 
-        self.update_tooltip_positions()
-        self.rt_pos_data = self.rt_position.download()
+        self._update_tooltip_positions()
+        self._rt_pos_data = self._rt_position.download()
 
     def draw_contents(self):
-        if self.shader is None:
+        if self._shader is None:
             return
-        self.render_pass.resize(self.framebuffer_size())
+        self._render_pass.resize(self.framebuffer_size())
 
         #t = (glfw.getTime())*0 + 45 * np.pi / 180
         #self._camera_matrix = np.float32(
@@ -190,16 +169,16 @@ class Sci3DWindow(Screen):
 
         s = self.size()
         view_scale = Matrix4f.scale([1, s[0] / s[1], 1])
-        with self.render_pass:
+        with self._render_pass:
             mvp = view_scale
-            self.shader.set_buffer("mvp", np.float32(mvp).T)
-            self.shader.set_buffer("object2camera", self._camera_matrix.T)
-            with self.shader:
-                self.shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
+            self._shader.set_buffer("mvp", np.float32(mvp).T)
+            self._shader.set_buffer("object2camera", self._camera_matrix.T)
+            with self._shader:
+                self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
         # Initialize world position buffer
-        if self.rt_pos_data is None:
-            self.rt_pos_data = self.rt_position.download()
+        if self._rt_pos_data is None:
+            self._rt_pos_data = self._rt_position.download()
 
             # Initialize tooltip
 
@@ -241,16 +220,16 @@ class Sci3DWindow(Screen):
                 kb_event_handled = True
 
         if kb_event_handled:
-            self.update_tooltip_positions()
-            self.rt_pos_data = self.rt_position.download()
+            self._update_tooltip_positions()
+            self._rt_pos_data = self._rt_position.download()
 
         return kb_event_handled
 
     def scroll_event(self, p, rel):
         self._scale_power += rel[1]
-        self.shader.set_buffer(
+        self._shader.set_buffer(
             "scale_factor", np.array(0.95**self._scale_power, dtype=np.float32))
-        self.update_tooltip_positions()
+        self._update_tooltip_positions()
 
     def mouse_motion_event(self, p, rel, button, modifiers):
         if super(Sci3DWindow, self).mouse_motion_event(p, rel, button, modifiers):
@@ -282,12 +261,12 @@ class Sci3DWindow(Screen):
             mouse_event_handled = True
 
         if mouse_event_handled:
-            self.update_tooltip_positions()
-            self.rt_pos_data = self.rt_position.download()
+            self._update_tooltip_positions()
+            self._rt_pos_data = self._rt_position.download()
 
         return mouse_event_handled
 
-    def update_tooltip_positions(self):
+    def _update_tooltip_positions(self):
         # Create camera matrix
         window_size = self.size()
         focal_length = 1
@@ -316,6 +295,35 @@ class Sci3DWindow(Screen):
             # Transform to screen coordinates
             tip_pos = viewport_matrix @ tip_pos
             tooltip.set_tip_position_screen_without_world_update(tip_pos.astype(np.int32))
+
+    def _setup_toolbar(self):
+        self._toolbar = Window(self, "")
+        self._toolbar.set_position((0, 0))
+
+        toolbar = Widget(self._toolbar)
+        padding = 2
+        layout = BoxLayout(Orientation.Horizontal, Alignment.Middle, padding, 6)
+        toolbar.set_layout(layout)
+
+        def create_tooltip(p, button, down, modifiers):
+            if down:
+                make_tooltip_btn.set_pushed(False)
+                self._tooltips.append(Tooltip(
+                    tip_position_screen=p,
+                    parent_screen=self,
+                    on_destroy_cbk=lambda tt: self._tooltips.remove(tt)
+                ))
+                self._handle_mouse_down = None
+
+        def cbk_handler():
+            self._handle_mouse_down = create_tooltip
+
+        make_tooltip_btn = ToolButton(toolbar, icons.FA_CROSSHAIRS)
+        make_tooltip_btn.set_callback(cbk_handler)
+
+        self.perform_layout()
+        btn_size = make_tooltip_btn.size()
+        self._toolbar.set_size((2*padding + self.size()[0], 2*padding + btn_size[1]))
 
 
 def uithread():
