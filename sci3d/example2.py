@@ -8,7 +8,7 @@ import gc
 import numpy as np
 import icecream
 
-from tooltip import Tooltip
+from sci3d.tooltip import Tooltip
 
 icecream.install()
 ic.configureOutput(includeContext=True)
@@ -29,9 +29,6 @@ class Sci3DWindow(Screen):
         # Events
         self._handle_mouse_down = None
 
-        # Rendering
-        self._shader = None
-
         # UI
         self._toolbar = None
         self._tooltips = []
@@ -40,7 +37,6 @@ class Sci3DWindow(Screen):
         self._setup_toolbar()
         self.perform_layout()
 
-        ic(self.size())
         self._rt_color = Texture(
             # TODO we dont need rgba
             Texture.PixelFormat.RGBA,
@@ -66,38 +62,11 @@ class Sci3DWindow(Screen):
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
 
-        with open('shaders/isosurface_vert.glsl') as f:
-            vertex_shader = f.read()
-
-        with open('shaders/isosurface_frag.glsl') as f:
-            fragment_shader = f.read()
-
-        self._shader = Shader(
-            self._render_pass,
-            "isosurface",
-            vertex_shader,
-            fragment_shader,
-            blend_mode=Shader.BlendMode.AlphaBlend
-        )
-
-        light_pos = np.eye(4, 3).astype(np.float32)
-        light_color = np.eye(4, 3).astype(np.float32)
-        self._shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
-        self._shader.set_buffer("light_pos[0]", light_pos.flatten())
-        self._shader.set_buffer("light_color[0]", light_color.flatten())
-
-        self._shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
-        self._shader.set_buffer("position", np.array(
-            [[-1, -1, 0],
-             [1, -1, 0],
-             [1, 1, 0],
-             [-1, 1, 0]],
-            dtype=np.float32
-        ))
-        self._texture = None
-        self.get_dummy_texture()
-        self._shader.set_texture3d("scalar_field", self._texture)
         self._camera_matrix = np.eye(4, dtype=np.float32)
+        self._plot_drawer = None
+
+    def set_plot_drawer(self, plot_drawer):
+        self._plot_drawer = plot_drawer
 
     def mouse_button_event(self, p, button, down, modifiers):
         super(Sci3DWindow, self).mouse_button_event(p, button, down, modifiers)
@@ -126,7 +95,7 @@ class Sci3DWindow(Screen):
         buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
         sdf = np.linalg.norm(buff, 2, 0) - 0.5
         """
-        #"""
+        """
         # armadillo
         sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
         sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
@@ -147,6 +116,7 @@ class Sci3DWindow(Screen):
 
     def draw(self, ctx):
         super(Sci3DWindow, self).draw(ctx)
+
         for tooltip in self._tooltips:
             tooltip.draw()
 
@@ -158,33 +128,19 @@ class Sci3DWindow(Screen):
         self._rt_pos_data = self._rt_position.download()
 
     def draw_contents(self):
-        if self._shader is None:
-            return
         self._render_pass.resize(self.framebuffer_size())
 
-        #t = (glfw.getTime())*0 + 45 * np.pi / 180
-        #self._camera_matrix = np.float32(
-        #    Matrix4f.translate([0.5, 0.5, 0.5]) @ Matrix4f.rotate([0, 1, 0], t) @ Matrix4f.translate([-0.5, -0.5, -0.5])
-        #)
-
-        s = self.size()
-        view_scale = Matrix4f.scale([1, s[0] / s[1], 1])
-        with self._render_pass:
-            mvp = view_scale
-            self._shader.set_buffer("mvp", np.float32(mvp).T)
-            self._shader.set_buffer("object2camera", self._camera_matrix.T)
-            with self._shader:
-                self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
+        if self._plot_drawer:
+            with self._render_pass:
+                self._plot_drawer.draw()
 
         # Initialize world position buffer
         if self._rt_pos_data is None:
             self._rt_pos_data = self._rt_position.download()
 
-            # Initialize tooltip
-
     def keyboard_event(self, key, scancode, action, modifiers):
         if super(Sci3DWindow, self).keyboard_event(key, scancode,
-                                               action, modifiers):
+                                                   action, modifiers):
             return True
 
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
@@ -199,6 +155,7 @@ class Sci3DWindow(Screen):
             'up': glfw.KEY_E,
             'down': glfw.KEY_Q,
         }
+
         self._move_vectors = {
             'forward': np.array([[0, 0, -1, 1]], dtype=np.float32).T,
             'back': np.array([[0, 0, 1, 1]], dtype=np.float32).T,
@@ -227,8 +184,6 @@ class Sci3DWindow(Screen):
 
     def scroll_event(self, p, rel):
         self._scale_power += rel[1]
-        self._shader.set_buffer(
-            "scale_factor", np.array(0.95**self._scale_power, dtype=np.float32))
         self._update_tooltip_positions()
 
     def mouse_motion_event(self, p, rel, button, modifiers):
