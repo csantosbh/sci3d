@@ -35,7 +35,7 @@ s3d.isosurface(sdf)
 ic('calling isosurf 2')
 s3d.isosurface(sdf)
 ic('second call done')
-while s3d.are_windows_open():
+while s3d.get_window_count() > 0:
     time.sleep(0.5)
 
 s3d.shutdown()

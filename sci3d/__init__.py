@@ -45,8 +45,8 @@ def isosurface(surface):
     _instantiate_window(Isosurface, surface)
 
 
-def are_windows_open():
-    return nanogui.get_window_count() > 0
+def get_window_count():
+    return nanogui.get_window_count()
 
 
 def shutdown():
