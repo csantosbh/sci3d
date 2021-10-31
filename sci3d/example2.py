@@ -82,38 +82,6 @@ class Sci3DWindow(Screen):
 
         return True
 
-    def get_dummy_texture(self):
-        # cube
-        buff = np.mgrid[0:1:196j, 0:1:196j, 0:1:196j].astype(np.float32)
-        sdf = np.maximum(
-            np.maximum(0.5 - buff[0, ...], -0.5 + buff[0, ...]),
-            np.maximum(np.maximum(0.5 - buff[1, ...], -0.5 + buff[1, ...]),
-                       np.maximum(0.5 - buff[2, ...], -0.5 + buff[2, ...]))
-        ) - 0.25
-        """
-        # sphere
-        buff = np.mgrid[-1:1:128j, -1:1:128j, -1:1:128j].astype(np.float32)
-        sdf = np.linalg.norm(buff, 2, 0) - 0.5
-        """
-        """
-        # armadillo
-        sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
-        sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
-        #"""
-
-        # Invert SDF sign if it is negative outside
-        sdf = sdf * np.sign(sdf[0, 0, 0])
-
-        self._texture = Texture3D(
-            Texture.PixelFormat.R,
-            Texture.ComponentFormat.Float32,
-            sdf.shape,
-            wrap_mode=Texture.WrapMode.ClampToEdge
-        )
-        self._texture.upload(sdf)
-        self._shader.set_buffer("image_resolution", np.array(sdf.shape[0], dtype=np.float32))
-        return self._texture
-
     def draw(self, ctx):
         super(Sci3DWindow, self).draw(ctx)
 

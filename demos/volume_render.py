@@ -32,18 +32,25 @@ sdf = sdf * np.sign(sdf[0, 0, 0])
 
 sdf = cube
 
-ic('call isosurf...')
 s1 = s3d.isosurface(cube, title='cube')
-ic('calling isosurf 2')
 s2 = s3d.isosurface(sphere, title='sphere')
-ic('second call done')
+
+cube_light_pos = np.array([
+    [0, 0, 0],
+    [1, 0, 0],
+], dtype=np.float32)
+cube_light_color = np.array([
+    [1, 1, 1],
+    [1, 0, 0],
+], dtype=np.float32)
+s1.set_lights(cube_light_pos, cube_light_color)
 
 t = 0
-dt = 1/60
+dt = 1.0/60.0
 while s3d.get_window_count() > 0:
     alpha = np.cos(t) * 0.5 + 0.5
     sdf = alpha * cube + (1-alpha) * sphere
-    s1.set_isosurface(sdf)
+    s2.set_isosurface(sdf)
     time.sleep(dt)
     t += dt * 3
 

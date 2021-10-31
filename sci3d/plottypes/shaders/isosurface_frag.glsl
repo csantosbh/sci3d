@@ -88,9 +88,9 @@ vec3 apply_lights(vec3 surface_pos, vec3 normal)
         vec3 surface_to_light = light_pos[light_idx] - surface_pos;
         //vec3 surface_to_light = light_pos - surface_pos;
         float s2l_distance = length(surface_to_light);
-        float lambertian_intensity = dot(
+        float lambertian_intensity = max(0, dot(
         normal, normalize(surface_to_light)
-        ) / s2l_distance;
+        )) / s2l_distance;
         output_color += lambertian_intensity * light_color[light_idx];
     }
 
