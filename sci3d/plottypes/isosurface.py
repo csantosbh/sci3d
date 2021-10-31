@@ -1,10 +1,40 @@
 from pathlib import Path
-from sci3d.example2 import Sci3DWindow
+from sci3d.window import Sci3DWindow
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
-    Matrix4f, glfw, icons
+    Matrix4f
+
+from sci3d.uithread import run_in_ui_thread
+
+
+class IsosurfaceApi(object):
+    def __init__(self, window: Sci3DWindow):
+        self._window = window
+
+    def set_isosurface(self, volume):
+        if not self._window.visible():
+            return
+
+        def impl():
+            isosurface_drawer: Isosurface = self._window._plot_drawer
+            isosurface_drawer.set_isosurface(volume)
+
+        run_in_ui_thread(impl)
+
+    def set_title(self, title):
+        self._window.set_caption(title)
+
+    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
+        if not self._window.visible():
+            return
+
+        def impl():
+            isosurface_drawer: Isosurface = self._window._plot_drawer
+            isosurface_drawer.set_lights(light_pos, light_color)
+
+        run_in_ui_thread(impl)
 
 
 class Isosurface(object):

@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 
-import queue
-import threading
-
 import nanogui
-import gc
 import numpy as np
-import icecream
 
 from sci3d.tooltip import Tooltip
-
-icecream.install()
-ic.configureOutput(includeContext=True)
 
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D,\
@@ -247,30 +239,3 @@ class Sci3DWindow(Screen):
         self.perform_layout()
         btn_size = make_tooltip_btn.size()
         self._toolbar.set_size((2*padding + self.size()[0], 2*padding + btn_size[1]))
-
-
-def uithread():
-    nanogui.init()
-    test1 = Sci3DWindow()
-    test1.draw_all()
-    test1.set_visible(True)
-    #test2 = Sci3DWindow()
-    #test2.draw_all()
-    #test2.set_visible(True)
-    nanogui.mainloop(refresh=1 / 60.0 * 1000)
-    del test1
-    #del test2
-    gc.collect()
-    nanogui.shutdown()
-    pass
-
-
-if __name__ == "__main__":
-    t = threading.Thread(target=uithread, daemon=False)
-    t.start()
-    q = queue.Queue()
-
-    #while True:
-    #    time.sleep(0.1)
-
-    t.join()
