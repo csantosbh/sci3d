@@ -1,19 +1,23 @@
-import time
+import time as _time
+from typing import Union, Callable
 
-import nanogui
-from nanogui import glfw
-import threading
+import nanogui as _nanogui
+import threading as _threading
 
-from sci3d.plottypes.isosurface import Isosurface
+import sci3d.plottypes as _plottypes
+import sci3d.api as _api
 
 from sci3d.example2 import *
 
 
 _lock = threading.Lock()
 _window_count = 0
+_api_types = Union[
+    _api.isosurface.IsosurfaceApi,
+]
 
 
-def uithread():
+def _ui_thread():
     nanogui.init()
     nanogui.set_server_mode(True)
 
@@ -22,8 +26,28 @@ def uithread():
     nanogui.shutdown()
 
 
-def _instantiate_window(plottype_ctor, params):
+def run_in_ui_thread(functor):
     finished = False
+
+    def _run_functor():
+        functor()
+
+        nonlocal finished
+        finished = True
+
+    _lock.acquire()
+    nanogui.call_async(_run_functor)
+    while not finished:
+        _time.sleep(1e-4)
+    _lock.release()
+
+
+def _instantiate_window(api_ctor: Callable[[Sci3DWindow], _api_types],
+                        plottype_ctor,
+                        params
+                        ) -> _api_types:
+    finished = False
+    api_object = None
 
     def _instantiate_window_impl():
         window = Sci3DWindow()
@@ -31,22 +55,33 @@ def _instantiate_window(plottype_ctor, params):
         window.draw_all()
         window.set_visible(True)
 
+        nonlocal api_object
+        api_object = api_ctor(window)
+
         nonlocal finished
         finished = True
 
     _lock.acquire()
     nanogui.call_async(_instantiate_window_impl)
     while not finished:
-        time.sleep(0.1)
+        _time.sleep(0.1)
     _lock.release()
 
+    return api_object
 
-def isosurface(surface):
-    _instantiate_window(Isosurface, surface)
+
+def isosurface(volume: np.ndarray,
+               **kwargs) -> _api.isosurface.IsosurfaceApi:
+    api_object = _instantiate_window(
+        _api.isosurface.IsosurfaceApi, _plottypes.isosurface.Isosurface, volume
+    )
+    api_object.set_title(kwargs.get('title', 'Sci3D'))
+
+    return api_object
 
 
 def get_window_count():
-    return nanogui.get_window_count()
+    return nanogui.get_visible_window_count()
 
 
 def shutdown():
@@ -61,9 +96,9 @@ def shutdown():
     _lock.acquire()
     nanogui.call_async(_shutdown_impl)
     while not finished:
-        time.sleep(0.1)
+        _time.sleep(0.1)
     _lock.release()
 
 
-t = threading.Thread(target=uithread, daemon=True)
-t.start()
+_ui_thread_obj = threading.Thread(target=_ui_thread, daemon=True)
+_ui_thread_obj.start()

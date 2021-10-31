@@ -8,7 +8,7 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 
 
 class Isosurface(object):
-    def __init__(self, window: Sci3DWindow, isosurface):
+    def __init__(self, window: Sci3DWindow, volume: np.ndarray):
         curr_path = Path(__file__).parent.resolve()
 
         with open(curr_path / 'shaders/isosurface_vert.glsl') as f:
@@ -25,13 +25,7 @@ class Isosurface(object):
             fragment_shader,
             blend_mode=Shader.BlendMode.AlphaBlend
         )
-
-        self._texture = Texture3D(
-            Texture.PixelFormat.R,
-            Texture.ComponentFormat.Float32,
-            isosurface.shape,
-            wrap_mode=Texture.WrapMode.ClampToEdge
-        )
+        self._texture = None
 
         light_pos = np.eye(4, 3).astype(np.float32)
         light_color = np.eye(4, 3).astype(np.float32)
@@ -49,11 +43,23 @@ class Isosurface(object):
         ))
 
         self._window = window
-        self._shader.set_texture3d("scalar_field", self._texture)
+        self.set_isosurface(volume)
 
-        self._texture.upload(isosurface)
-        self._shader.set_buffer(
-            "image_resolution", np.array(isosurface.shape[0], dtype=np.float32))
+    def set_isosurface(self, volume):
+        self._window.make_context_current()
+        if self._texture is None or self._texture.size() != volume.shape:
+            self._texture = Texture3D(
+                Texture.PixelFormat.R,
+                Texture.ComponentFormat.Float32,
+                volume.shape,
+                wrap_mode=Texture.WrapMode.ClampToEdge
+            )
+
+            self._shader.set_texture3d("scalar_field", self._texture)
+            self._shader.set_buffer(
+                "image_resolution", np.array(volume.shape[0], dtype=np.float32))
+
+        self._texture.upload(volume)
 
     def draw(self):
         s = self._window.size()
@@ -64,7 +70,7 @@ class Isosurface(object):
         self._shader.set_buffer("object2camera", self._window._camera_matrix.T)
         # TODO make public accessor fow _camera_matrix
         self._shader.set_buffer(
-            "scale_factor", np.array(0.95**self._window._scale_power, dtype=np.float32))
+            "scale_factor", np.array(0.95 ** self._window._scale_power, dtype=np.float32))
 
         with self._shader:
             self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
