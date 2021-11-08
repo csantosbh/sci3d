@@ -1,4 +1,4 @@
-from typing import Union, Callable, Type
+from typing import Union, Callable, Type, Optional, List
 import time
 
 import numpy as np
@@ -17,12 +17,21 @@ _api_types = Union[
 _plot_types = Union[
     isosurface.Isosurface,
 ]
+_figures: List[Sci3DWindow] = []
+_current_figure: Optional[Sci3DWindow] = None
+
+
+def figure():
+    _instantiate_window()
 
 
 def isosurface(volume: np.ndarray,
                **kwargs) -> plottypes.isosurface.IsosurfaceApi:
-    api_object = _instantiate_window(
-        plottypes.isosurface.IsosurfaceApi, plottypes.isosurface.Isosurface, volume
+    api_object = _add_surface_to_window(
+        _current_figure,
+        plottypes.isosurface.IsosurfaceApi,
+        plottypes.isosurface.Isosurface,
+        volume
     )
     api_object.set_title(kwargs.get('title', 'Sci3D'))
 
@@ -49,27 +58,63 @@ def shutdown():
     _lock.release()
 
 
-def _instantiate_window(api_ctor: Type[_api_types],
-                        plottype_ctor: Type[_plot_types],
-                        *plottype_params
-                        ) -> _api_types:
+def _instantiate_window() -> Sci3DWindow:
+    global _current_figure
+    global _figures
+
     finished = False
-    api_object = None
+    new_window: Optional[Sci3DWindow] = None
 
-    def _instantiate_window_impl():
-        window = Sci3DWindow()
-        window.set_plot_drawer(plottype_ctor(window, *plottype_params))
-        window.draw_all()
-        window.set_visible(True)
+    def async_impl():
+        nonlocal new_window
 
-        nonlocal api_object
-        api_object = api_ctor(window)
+        new_window = Sci3DWindow()
+        new_window.draw_all()
+        new_window.set_visible(True)
 
         nonlocal finished
         finished = True
 
     _lock.acquire()
-    nanogui.call_async(_instantiate_window_impl)
+    nanogui.call_async(async_impl)
+
+    while not finished:
+        time.sleep(0.1)
+
+    _current_figure = new_window
+    _figures.append(new_window)
+    _lock.release()
+
+    return new_window
+
+
+def _add_surface_to_window(window: Sci3DWindow,
+                           api_ctor: Optional[Type[_api_types]],
+                           plottype_ctor: Optional[Type[_plot_types]],
+                           *plottype_params
+                           ) -> _api_types:
+    finished = False
+    api_object = None
+
+    # Create window if none exist
+    if len(_figures) == 0:
+        window = _instantiate_window()
+
+    def async_impl():
+        nonlocal api_object
+        nonlocal window
+
+        plottype_obj = plottype_ctor(_current_figure, *plottype_params)
+        _current_figure.add_plot_drawer(plottype_obj)
+        api_object = api_ctor(_current_figure, plottype_obj)
+
+        window.set_visible(True)
+
+        nonlocal finished
+        finished = True
+
+    _lock.acquire()
+    nanogui.call_async(async_impl)
     while not finished:
         time.sleep(0.1)
     _lock.release()

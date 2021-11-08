@@ -55,10 +55,10 @@ class Sci3DWindow(Screen):
         assert(nanogui.api == 'opengl')
 
         self._camera_matrix = np.eye(4, dtype=np.float32)
-        self._plot_drawer = None
+        self._plot_drawers = []
 
-    def set_plot_drawer(self, plot_drawer):
-        self._plot_drawer = plot_drawer
+    def add_plot_drawer(self, plot_drawer):
+        self._plot_drawers.append(plot_drawer)
 
     def mouse_button_event(self, p, button, down, modifiers):
         super(Sci3DWindow, self).mouse_button_event(p, button, down, modifiers)
@@ -90,9 +90,9 @@ class Sci3DWindow(Screen):
     def draw_contents(self):
         self._render_pass.resize(self.framebuffer_size())
 
-        if self._plot_drawer:
-            with self._render_pass:
-                self._plot_drawer.draw()
+        with self._render_pass:
+            for plot_drawer in self._plot_drawers:
+                plot_drawer.draw()
 
         # Initialize world position buffer
         if self._rt_pos_data is None:

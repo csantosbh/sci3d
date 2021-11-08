@@ -9,34 +9,6 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 from sci3d.uithread import run_in_ui_thread
 
 
-class IsosurfaceApi(object):
-    def __init__(self, window: Sci3DWindow):
-        self._window = window
-
-    def set_isosurface(self, volume):
-        if not self._window.visible():
-            return
-
-        def impl():
-            isosurface_drawer: Isosurface = self._window._plot_drawer
-            isosurface_drawer.set_isosurface(volume)
-
-        run_in_ui_thread(impl)
-
-    def set_title(self, title):
-        self._window.set_caption(title)
-
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if not self._window.visible():
-            return
-
-        def impl():
-            isosurface_drawer: Isosurface = self._window._plot_drawer
-            isosurface_drawer.set_lights(light_pos, light_color)
-
-        run_in_ui_thread(impl)
-
-
 class Isosurface(object):
     def __init__(self, window: Sci3DWindow, volume: np.ndarray):
         self._num_lights = 4
@@ -115,3 +87,29 @@ class Isosurface(object):
         with self._shader:
             self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
+
+class IsosurfaceApi(object):
+    def __init__(self, window: Sci3DWindow, plot_drawer: Isosurface):
+        self._window = window
+        self._plot_drawer = plot_drawer
+
+    def set_isosurface(self, volume):
+        if not self._window.visible():
+            return
+
+        def impl():
+            self._plot_drawer.set_isosurface(volume)
+
+        run_in_ui_thread(impl)
+
+    def set_title(self, title):
+        self._window.set_caption(title)
+
+    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
+        if not self._window.visible():
+            return
+
+        def impl():
+            self._plot_drawer.set_lights(light_pos, light_color)
+
+        run_in_ui_thread(impl)

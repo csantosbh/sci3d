@@ -1,1 +1,1 @@
-from sci3d.api.api import isosurface, get_window_count, shutdown
+from sci3d.api.api import figure, isosurface, get_window_count, shutdown

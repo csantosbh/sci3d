@@ -6,6 +6,7 @@ import icecream
 
 import sci3d as s3d
 
+
 icecream.install()
 
 count = 128j
@@ -33,25 +34,32 @@ sdf = sdf * np.sign(sdf[0, 0, 0])
 sdf = cube
 
 s1 = s3d.isosurface(cube, title='cube')
+#s3d.figure()
 s2 = s3d.isosurface(sphere, title='sphere')
-
-cube_light_pos = np.array([
-    [0, 0, 0],
-    [1, 0, 0],
-], dtype=np.float32)
-cube_light_color = np.array([
-    [1, 1, 1],
-    [1, 0, 0],
-], dtype=np.float32)
-s1.set_lights(cube_light_pos, cube_light_color)
 
 t = 0
 dt = 1.0/60.0
+
 while s3d.get_window_count() > 0:
+    # Update s1 lighting
+    cube_light_pos = np.array([
+        [0, 0, 0],
+        [1.5, np.sin(t) * 0.5 + 0.5, 0.5],
+    ], dtype=np.float32)
+    cube_light_color = np.array([
+        [1, 1, 1],
+        [1, np.cos(2*t) * 0.5 + 0.5, np.sin(3*t) * 0.5 + 0.5],
+    ], dtype=np.float32)
+    s1.set_lights(cube_light_pos, cube_light_color)
+
+    # Update s2 shape
+    """
     alpha = np.cos(t) * 0.5 + 0.5
     sdf = alpha * cube + (1-alpha) * sphere
     s2.set_isosurface(sdf)
+    #"""
     time.sleep(dt)
     t += dt * 3
+
 
 s3d.shutdown()
