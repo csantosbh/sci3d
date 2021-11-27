@@ -78,11 +78,9 @@ class Isosurface(object):
         view_scale = Matrix4f.scale([1, s[0] / s[1], 1])
         mvp = view_scale
         self._shader.set_buffer("mvp", np.float32(mvp).T)
-        # TODO make public accessor fow _camera_matrix
-        self._shader.set_buffer("object2camera", self._window._camera_matrix.T)
-        # TODO make public accessor fow _camera_matrix
-        self._shader.set_buffer(
-            "scale_factor", np.array(0.95 ** self._window._scale_power, dtype=np.float32))
+        self._shader.set_buffer("camera2world", self._window.camera2world().T)
+        self._shader.set_buffer("camera_fov", self._window.camera_fov)
+        self._shader.set_buffer("scale_factor", self._window.scale_factor)
 
         with self._shader:
             self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)

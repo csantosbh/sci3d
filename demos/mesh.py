@@ -9,33 +9,35 @@ import sci3d as s3d
 
 icecream.install()
 
-count = 128j
+resolution = 128j
 
-# cube
-buff = np.mgrid[0:1:count, 0:1:count, 0:1:count].astype(np.float32)
+# Make cube
+buff = np.mgrid[0:1:resolution, 0:1:resolution, 0:1:resolution].astype(np.float32)
 cube = np.maximum(
     np.maximum(0.5 - buff[0, ...], -0.5 + buff[0, ...]),
     np.maximum(np.maximum(0.5 - buff[1, ...], -0.5 + buff[1, ...]),
                np.maximum(0.5 - buff[2, ...], -0.5 + buff[2, ...]))
 ) - 0.25
 
-# sphere
-buff = np.mgrid[-1:1:count, -1:1:count, -1:1:count].astype(np.float32)
-sphere = np.linalg.norm(buff, 2, 0) - 0.5
+# Make mesh
+vertices = np.array([
+    [0.25, 0.25, -0.25],
+    [0.75, 0.25, -0.25],
+    [0.75, 0.75, -0.25],
+    [0.25, 0.75, -0.25],
+    [0.50, 1.00, -0.25],
+], dtype=np.float32)
+indices = np.array([
+    [0, 1, 2],
+    [2, 3, 0],
+    [4, 3, 2],
+    [1, 0, 2],
+    [3, 2, 0],
+    [3, 4, 2]
+], dtype=np.uint32)
 
-"""
-# armadillo
-sdf = np.load("/home/claudio/workspace/adventures-in-tensorflow/volume_armadillo.npz")
-sdf = (sdf['scalar_field'] - sdf['target_level']).astype(np.float32)
-# Invert SDF sign if it is negative outside
-sdf = sdf * np.sign(sdf[0, 0, 0])
-# """
-
-sdf = cube
-
+s2 = s3d.mesh(vertices, indices)
 s1 = s3d.isosurface(cube, title='cube')
-#s3d.figure()
-s2 = s3d.isosurface(sphere, title='sphere')
 
 t = 0
 dt = 1.0/60.0
@@ -50,14 +52,9 @@ while s3d.get_window_count() > 0:
         [1, 1, 1],
         [1, np.cos(2*t) * 0.5 + 0.5, np.sin(3*t) * 0.5 + 0.5],
     ], dtype=np.float32)
-    s1.set_lights(cube_light_pos, cube_light_color)
+    #s1.set_lights(cube_light_pos, cube_light_color)
+    s2.set_mesh(vertices=(vertices + np.array([[np.cos(t*0.2)/10, 0, 0]], dtype=np.float32)))
 
-    # Update s2 shape
-    """
-    alpha = np.cos(t) * 0.5 + 0.5
-    sdf = alpha * cube + (1-alpha) * sphere
-    s2.set_isosurface(sdf)
-    #"""
     time.sleep(dt)
     t += dt * 3
 

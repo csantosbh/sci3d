@@ -7,15 +7,17 @@ import nanogui
 
 from sci3d.uithread import _lock
 import sci3d.plottypes as plottypes
-import sci3d.plottypes.isosurface as isosurface
+from sci3d.plottypes import mesh, isosurface
 from sci3d.window import Sci3DWindow
 
 
 _api_types = Union[
-    isosurface.IsosurfaceApi,
+    plottypes.isosurface.IsosurfaceApi,
+    plottypes.mesh.MeshApi
 ]
 _plot_types = Union[
-    isosurface.Isosurface,
+    plottypes.isosurface.Isosurface,
+    plottypes.mesh.Mesh,
 ]
 _figures: List[Sci3DWindow] = []
 _current_figure: Optional[Sci3DWindow] = None
@@ -26,12 +28,35 @@ def figure():
 
 
 def isosurface(volume: np.ndarray,
-               **kwargs) -> plottypes.isosurface.IsosurfaceApi:
+               **kwargs) -> isosurface.IsosurfaceApi:
     api_object = _add_surface_to_window(
         _current_figure,
         plottypes.isosurface.IsosurfaceApi,
         plottypes.isosurface.Isosurface,
         volume
+    )
+    api_object.set_title(kwargs.get('title', 'Sci3D'))
+
+    return api_object
+
+
+def mesh(vertices: np.ndarray,
+         triangles: np.ndarray,
+         **kwargs) -> mesh.MeshApi:
+    assert(vertices.ndim == 2)
+    assert(vertices.shape[1] == 3)
+    assert(vertices.dtype == np.float32)
+
+    assert(triangles.ndim == 2)
+    assert(triangles.shape[1] == 3)
+    assert(triangles.dtype == np.uint32)
+
+    api_object = _add_surface_to_window(
+        _current_figure,
+        plottypes.mesh.MeshApi,
+        plottypes.mesh.Mesh,
+        {'vertices': vertices,
+         'triangles': triangles}
     )
     api_object.set_title(kwargs.get('title', 'Sci3D'))
 

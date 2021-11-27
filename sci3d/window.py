@@ -4,6 +4,7 @@ import nanogui
 import numpy as np
 
 from sci3d.tooltip import Tooltip
+import sci3d.common as common
 
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D,\
@@ -14,6 +15,18 @@ class Sci3DWindow(Screen):
     @property
     def depth_buffer(self):
         return self._rt_pos_data
+
+    @property
+    def camera_fov(self):
+        return self._camera_fov
+
+    @camera_fov.setter
+    def camera_fov(self, value):
+        self._camera_fov = np.array(value, dtype=np.float32)
+
+    @property
+    def scale_factor(self):
+        return np.array(0.95 ** self._scale_power, dtype=np.float32)
 
     def __init__(self, size=(1024, 768), title='Sci3D'):
         super(Sci3DWindow, self).__init__(size, title)
@@ -46,7 +59,15 @@ class Sci3DWindow(Screen):
             # TODO using shaderread has implications that I'm not sure I want
             flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
         )
-        self._render_pass = RenderPass([self._rt_color, self._rt_position], blit_target=self)
+        self._rt_depth = Texture(
+            Texture.PixelFormat.Depth,
+            Texture.ComponentFormat.Float32,
+            self.size(),
+            flags=Texture.TextureFlags.RenderTarget
+        )
+        self._render_pass = RenderPass(
+            [self._rt_color, self._rt_position], self._rt_depth, blit_target=self
+        )
         self._render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
 
         self._rt_pos_data = None
@@ -54,11 +75,38 @@ class Sci3DWindow(Screen):
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
 
-        self._camera_matrix = np.eye(4, dtype=np.float32)
+        self._camera_rotation = np.eye(3, dtype=np.float32)
+        self._camera_position = np.zeros((3, 1), dtype=np.float32)
+        self._camera_fov = np.array(45 * np.pi / 180, dtype=np.float32)
         self._plot_drawers = []
 
     def add_plot_drawer(self, plot_drawer):
         self._plot_drawers.append(plot_drawer)
+
+    def world2camera(self):
+        return common.inverse_affine(self._camera_rotation, self._camera_position)
+
+    def camera2world(self):
+        return common.forward_affine(self._camera_rotation, self._camera_position)
+
+    def draw(self, ctx):
+        super(Sci3DWindow, self).draw(ctx)
+
+        self._update_camera_position()
+
+        for tooltip in self._tooltips:
+            tooltip.draw()
+
+    def draw_contents(self):
+        self._render_pass.resize(self.framebuffer_size())
+
+        with self._render_pass:
+            for plot_drawer in self._plot_drawers:
+                plot_drawer.draw()
+
+        # Initialize world position buffer
+        if self._rt_pos_data is None:
+            self._rt_pos_data = self._rt_position.download()
 
     def mouse_button_event(self, p, button, down, modifiers):
         super(Sci3DWindow, self).mouse_button_event(p, button, down, modifiers)
@@ -74,29 +122,12 @@ class Sci3DWindow(Screen):
 
         return True
 
-    def draw(self, ctx):
-        super(Sci3DWindow, self).draw(ctx)
-
-        for tooltip in self._tooltips:
-            tooltip.draw()
-
     def resize_event(self, size):
         super(Sci3DWindow, self).resize_event(size)
         self._toolbar.set_size((size[0], self._toolbar.size()[1]))
 
         self._update_tooltip_positions()
         self._rt_pos_data = self._rt_position.download()
-
-    def draw_contents(self):
-        self._render_pass.resize(self.framebuffer_size())
-
-        with self._render_pass:
-            for plot_drawer in self._plot_drawers:
-                plot_drawer.draw()
-
-        # Initialize world position buffer
-        if self._rt_pos_data is None:
-            self._rt_pos_data = self._rt_position.download()
 
     def keyboard_event(self, key, scancode, action, modifiers):
         if super(Sci3DWindow, self).keyboard_event(key, scancode,
@@ -107,40 +138,7 @@ class Sci3DWindow(Screen):
             self.set_visible(False)
             return True
 
-        self._ctrl_keys = {
-            'forward': glfw.KEY_W,
-            'left': glfw.KEY_A,
-            'right': glfw.KEY_D,
-            'back': glfw.KEY_S,
-            'up': glfw.KEY_E,
-            'down': glfw.KEY_Q,
-        }
-
-        self._move_vectors = {
-            'forward': np.array([[0, 0, -1, 1]], dtype=np.float32).T,
-            'back': np.array([[0, 0, 1, 1]], dtype=np.float32).T,
-            'left': np.array([[-1, 0, 0, 1]], dtype=np.float32).T,
-            'right': np.array([[1, 0, 0, 1]], dtype=np.float32).T,
-            'up': np.array([[0, 1, 0, 1]], dtype=np.float32).T,
-            'down': np.array([[0, -1, 0, 1]], dtype=np.float32).T,
-        }
-
-        kb_event_handled = False
-
-        for movement, ctrl_key in self._ctrl_keys.items():
-            if key == ctrl_key:
-                move_matrix = np.concatenate(
-                    [np.eye(4, 3, dtype=np.float32), 0.01*self._move_vectors[movement]], 1)
-                move_matrix[3, 3] = 1
-                self._camera_matrix = np.matmul(self._camera_matrix,
-                                                move_matrix)
-                kb_event_handled = True
-
-        if kb_event_handled:
-            self._update_tooltip_positions()
-            self._rt_pos_data = self._rt_position.download()
-
-        return kb_event_handled
+        return False
 
     def scroll_event(self, p, rel):
         self._scale_power += rel[1]
@@ -159,19 +157,20 @@ class Sci3DWindow(Screen):
 
         if button == glfw.MOUSE_BUTTON_2:
             screen_size = np.max(self.size()) / 2
-            new_fwd = np.array([rel.x/screen_size, -rel.y/screen_size, 1])
+
+            identity_up = np.array([0, 1, 0], dtype=np.float32)
+
+            new_fwd = np.array([rel.x/screen_size, -rel.y/screen_size, 1], dtype=np.float32)
             new_fwd = new_fwd / np.linalg.norm(new_fwd)
-            identity_up = np.array([0, 1, 0])
+
             new_left = np.cross(identity_up, new_fwd)
+
             new_up = -np.cross(new_left, new_fwd)
-            rot_mat = np.concatenate([
-                new_left[:, np.newaxis], new_up[:, np.newaxis], new_fwd[:, np.newaxis], np.zeros((3, 1))
+
+            self._camera_rotation = self._camera_rotation @ np.concatenate([
+                new_left[:, np.newaxis], new_up[:, np.newaxis], new_fwd[:, np.newaxis]
             ], axis=1)
-            rot_mat = np.concatenate([rot_mat, [[0, 0, 0, 1]]], 0).astype(np.float32)
-            self._camera_matrix = np.matmul(
-                self._camera_matrix,
-                rot_mat
-            )
+            self._camera_rotation = common.orthonormalize(self._camera_rotation)
 
             mouse_event_handled = True
 
@@ -181,31 +180,61 @@ class Sci3DWindow(Screen):
 
         return mouse_event_handled
 
+    def _update_camera_position(self):
+        ctrl_keys = {
+            'forward': glfw.KEY_W,
+            'left': glfw.KEY_A,
+            'right': glfw.KEY_D,
+            'back': glfw.KEY_S,
+            'up': glfw.KEY_E,
+            'down': glfw.KEY_Q,
+        }
+
+        move_vectors = {
+            'forward': -self._camera_rotation[:, 2:3],
+            'back': self._camera_rotation[:, 2:3],
+            'left': -self._camera_rotation[:, 0:1],
+            'right': self._camera_rotation[:, 0:1],
+            'up': self._camera_rotation[:, 1:2],
+            'down': -self._camera_rotation[:, 1:2],
+        }
+
+        kb_event_handled = False
+
+        movement_direction = np.zeros((3, 1), dtype=np.float32)
+        for movement, ctrl_key in ctrl_keys.items():
+            if self.get_key_status(ctrl_key) == glfw.PRESS:
+                movement_direction += move_vectors[movement]
+                kb_event_handled = True
+
+        speed = 0.01
+        if self.get_key_status(glfw.KEY_LEFT_SHIFT) == glfw.PRESS:
+            speed *= 10
+
+        if kb_event_handled:
+            self._update_tooltip_positions()
+            self._rt_pos_data = self._rt_position.download()
+            eps = 1e-6
+            movement_direction = movement_direction / (eps + np.linalg.norm(movement_direction))
+            self._camera_position += speed * movement_direction
+
     def _update_tooltip_positions(self):
         # Create camera matrix
-        window_size = self.size()
-        focal_length = 1
-        scale_factor = np.array(0.95**self._scale_power, dtype=np.float32)
-        projection_matrix = np.array([
-            [focal_length * window_size[0], 0, 0, 0],
-            [0, focal_length * window_size[0], 0, 0],
-            [0, 0, window_size[0], 0],
-            [0, 0, -1, 0],
-        ])
-        focal_center = np.array([0.5, 0.5, focal_length, 0])
-        # Transform from world space to camera space
-        world2camera = np.linalg.inv(self._camera_matrix)
+        width, height = self.size()
+        projection_matrix = common.get_projection_matrix(
+            0.1, 1e3, self.camera_fov,
+            height / width, self.scale_factor
+        )
         # Create viewport matrix
         viewport_matrix = np.array([
-            [1./scale_factor, 0, 0, 0.5 * window_size[0]],
-            [0, -1./scale_factor, 0, 0.5 * window_size[1]],
+            [0.5 * width, 0, 0, 0.5 * width],
+            [0, -0.5 * height, 0, 0.5 * height],
         ])
 
         for tooltip in self._tooltips:
             # Bring tip coordinate from world to camera space
-            tip_pos = world2camera @ tooltip.tip_position_world - focal_center
-            # Perform camera projection and homogeneous normalization
-            tip_pos = np.matmul(projection_matrix, tip_pos)
+            tip_pos = projection_matrix @ self.world2camera() @ tooltip.tip_position_world
+            # Perform homogeneous normalization
             tip_pos = tip_pos / tip_pos[-1]
             # Transform to screen coordinates
             tip_pos = viewport_matrix @ tip_pos

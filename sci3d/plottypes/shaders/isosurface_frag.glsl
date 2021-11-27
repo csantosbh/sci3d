@@ -1,12 +1,12 @@
 #version 330
-//#define CAMERA_ORTHOGONAL
-in vec2 uv;
+in vec2 screen_coords_01;
 layout(location = 0) out vec4 color;
 layout(location = 1) out vec4 out_surface_position;
 
 uniform sampler3D scalar_field;
-uniform mat4 object2camera;
+uniform mat4 camera2world;
 uniform float image_resolution;
+uniform float camera_fov;
 uniform vec3 light_pos[4];
 uniform vec3 light_color[4];
 
@@ -55,7 +55,7 @@ vec4 intersect_isocurve_0(vec3 start, vec3 ray_direction) {
         float is_ray_outside = float(sdf >= 0);
         float step_direction = mix(-1, 1, is_ray_outside);
         float ray_crossed_isocurve = float(
-        is_ray_outside != was_ray_previously_outside
+            is_ray_outside != was_ray_previously_outside
         );
         step_size = mix(step_size, step_size * 0.5, ray_crossed_isocurve);
         was_ray_previously_outside = is_ray_outside;
@@ -98,24 +98,19 @@ vec3 apply_lights(vec3 surface_pos, vec3 normal)
 }
 
 void main() {
-    vec3 curr_pos_l = vec3(uv, 0.0);
-    vec3 curr_pos_w = (object2camera * vec4(curr_pos_l, 1)).xyz;
+    float near_plane_side = tan(camera_fov * 0.5);
+    vec3 curr_pos_l = vec3(screen_coords_01 * near_plane_side, -1);
+    vec3 curr_pos_w = (camera2world * vec4(0, 0, 0, 1)).xyz;
+    vec3 cam_forward = (camera2world * vec4(0, 0, -1, 0)).xyz;
 
     // Hide fragment if inside volume
     color.a = max(0, sign(sample_sdf(curr_pos_w.xyz)));
 
-    // Setup camera
-    #if defined(CAMERA_ORTHOGONAL)
-    // orthogonal
-    vec4 curr_dir = object2camera * vec4(0, 0, -1, 0);
-    #else
-    // perspective
-    float focal_length = 1.0;
-    vec4 curr_dir = object2camera * vec4(
-    normalize(curr_pos_l - vec3(0.5, 0.5, focal_length)),
-    0
+    // perspective direction
+    vec4 curr_dir = camera2world * vec4(
+        normalize(curr_pos_l),
+        0
     );
-    #endif
 
     // Get surface geometry
     vec4 iso_intersection = intersect_isocurve_0(curr_pos_w, curr_dir.xyz);
@@ -123,11 +118,21 @@ void main() {
     float sdf_value = iso_intersection.w;
     float eps = 0.01;
     // Hide pixels that do not contain the isosurface
-    color.a *= smoothstep(2*eps, eps, iso_intersection.w);
+    color.a *= smoothstep(2 * eps, eps, iso_intersection.w);
     vec3 normal = normalize(gradient(surface_pos));
 
     // Apply lighting
     color.rgb = apply_lights(surface_pos, normal);
 
     out_surface_position = vec4(surface_pos, 1);
+
+    // Map depth to NDC coordinates
+    const float near = 0.1;
+    const float far = 1e3;
+    // TODO make this uniform
+    vec2 depth_remap = vec2(-(far + near) / (far - near), -2*far*near / (far - near));
+
+    float fragment_depth = -dot(cam_forward, surface_pos - curr_pos_w);
+    float depth_01 = (fragment_depth * depth_remap.x + depth_remap.y) / -fragment_depth;
+    gl_FragDepth = depth_01;
 }
