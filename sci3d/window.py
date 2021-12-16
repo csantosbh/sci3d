@@ -11,6 +11,65 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Matrix4f, glfw, icons
 
 
+class Gizmo(object):
+    def _make_axis(self,
+                   rotation: np.ndarray,
+                   color: np.ndarray):
+        height = 0.005
+        base = 0.0015
+        vertices, triangles = common.cone(base, height, 5)
+
+        upsidedown_r = common.rot_x(np.pi)
+        upsidedown_t = np.array([[0, -height, 0]], dtype=np.float32)
+
+        vertices = ((vertices + upsidedown_t) @ upsidedown_r.T) @ rotation.T
+
+        colors = np.repeat([color], vertices.shape[0], axis=0).astype(np.float32)
+        mesh = common.Mesh(
+            # TODO create public accessor
+            self._window._render_pass,
+            vertices, triangles, None, colors,
+            self._projection
+        )
+
+        # Basic lighting for gizmos
+        light_pos = np.zeros((4, 3)).astype(np.float32)
+        light_color = np.zeros((4, 3)).astype(np.float32)
+        light_color[0, :] = 1
+
+        mesh.set_lights(light_pos, light_color)
+        return mesh
+
+    def __init__(self, window):
+        self._window: Sci3DWindow = window
+        self._projection = common.get_projection_matrix(
+            near=0.1,
+            far=1e3,
+            fov=window.camera_fov,
+            hw_ratio=window.size()[1] / window.size()[0],
+            scale_factor=1,
+        )
+
+        # TODO batch meshes together to avoid unnecessary draw calls
+        self._meshes = [
+            self._make_axis(common.rot_z(-np.pi/2), [1, 0, 0]),
+            self._make_axis(np.eye(3, dtype=np.float32), [0, 1, 0]),
+            self._make_axis(common.rot_x(np.pi / 2), [0, 0, 1]),
+        ]
+
+    def draw(self):
+        width, height = self._window.size()
+        depth = 0.2
+        x = np.tan(0.9 * self._window.camera_fov / 2) * depth
+        y = x * height / width
+        object2world = common.forward_affine(
+            self._window._camera_rotation.T,
+            np.array([[-x, -y, -depth]], dtype=np.float32).T
+        )
+        world2camera = np.eye(4, dtype=np.float32)
+        [m.draw(object2world, world2camera, self._projection) for m in self._meshes]
+
+
 class Sci3DWindow(Screen):
     @property
     def depth_buffer(self):
@@ -30,6 +89,12 @@ class Sci3DWindow(Screen):
 
     def __init__(self, size=(1024, 768), title='Sci3D'):
         super(Sci3DWindow, self).__init__(size, title)
+
+        # Camera
+        self._camera_rotation = np.eye(3, dtype=np.float32)
+        self._camera_position = np.zeros((3, 1), dtype=np.float32)
+        self._camera_fov = np.array(45 * np.pi / 180, dtype=np.float32)
+        self._plot_drawers = []
 
         # Events
         self._handle_mouse_down = None
@@ -72,13 +137,11 @@ class Sci3DWindow(Screen):
 
         self._rt_pos_data = None
 
+        # Additional UI
+        self._gizmo = Gizmo(self)
+
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
-
-        self._camera_rotation = np.eye(3, dtype=np.float32)
-        self._camera_position = np.zeros((3, 1), dtype=np.float32)
-        self._camera_fov = np.array(45 * np.pi / 180, dtype=np.float32)
-        self._plot_drawers = []
 
     def add_plot_drawer(self, plot_drawer):
         self._plot_drawers.append(plot_drawer)
@@ -104,6 +167,8 @@ class Sci3DWindow(Screen):
             for plot_drawer in self._plot_drawers:
                 plot_drawer.draw()
 
+            self._gizmo.draw()
+
         # Initialize world position buffer
         if self._rt_pos_data is None:
             self._rt_pos_data = self._rt_position.download()
@@ -119,6 +184,10 @@ class Sci3DWindow(Screen):
 
         if self._handle_mouse_down:
             self._handle_mouse_down(p, button, down, modifiers)
+
+        if not down:
+            # TODO we can store depth only and estimate XY from it
+            self._rt_pos_data = self._rt_position.download()
 
         return True
 
@@ -176,7 +245,6 @@ class Sci3DWindow(Screen):
 
         if mouse_event_handled:
             self._update_tooltip_positions()
-            self._rt_pos_data = self._rt_position.download()
 
         return mouse_event_handled
 

@@ -21,19 +21,32 @@ cube = np.maximum(
 
 # Make mesh
 vertices = np.array([
-    [0.25, 0.25, -0.25],
-    [0.75, 0.25, -0.25],
-    [0.75, 0.75, -0.25],
-    [0.25, 0.75, -0.25],
-    [0.50, 1.00, -0.25],
+    [0.25, 0.25, -0.25],  # 0
+    [0.75, 0.25, -0.25],  # 1
+    [0.75, 0.75, -0.25],  # 2
+    [0.25, 0.75, -0.25],  # 3
+
+    [0.25, 0.25, -0.75],  # 4
+    [0.75, 0.25, -0.75],  # 5
+    [0.75, 0.75, -0.75],  # 6
+    [0.25, 0.75, -0.75],  # 7
 ], dtype=np.float32)
 indices = np.array([
     [0, 1, 2],
     [2, 3, 0],
-    [4, 3, 2],
+    [4, 5, 6],
+    [6, 7, 4],
+    [0, 3, 7],
+    [7, 4, 0],
+
+
+
     [1, 0, 2],
     [3, 2, 0],
-    [3, 4, 2]
+    [5, 4, 6],
+    [7, 6, 4],
+    [3, 0, 7],
+    [4, 7, 0],
 ], dtype=np.uint32)
 
 s2 = s3d.mesh(vertices, indices)
@@ -53,7 +66,7 @@ while s3d.get_window_count() > 0:
         [1, np.cos(2*t) * 0.5 + 0.5, np.sin(3*t) * 0.5 + 0.5],
     ], dtype=np.float32)
     #s1.set_lights(cube_light_pos, cube_light_color)
-    s2.set_mesh(vertices=(vertices + np.array([[np.cos(t*0.2)/10, 0, 0]], dtype=np.float32)))
+    #s2.set_mesh(vertices=(vertices + np.array([[np.cos(t*0.2)/10, 0, 0]], dtype=np.float32)))
 
     time.sleep(dt)
     t += dt * 3

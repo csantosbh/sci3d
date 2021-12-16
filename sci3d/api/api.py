@@ -1,4 +1,4 @@
-from typing import Union, Callable, Type, Optional, List
+from typing import Union, Callable, Type, Optional, List, Dict
 import time
 
 import numpy as np
@@ -17,7 +17,7 @@ _api_types = Union[
 ]
 _plot_types = Union[
     plottypes.isosurface.Isosurface,
-    plottypes.mesh.Mesh,
+    plottypes.mesh.MeshSurface,
 ]
 _figures: List[Sci3DWindow] = []
 _current_figure: Optional[Sci3DWindow] = None
@@ -33,7 +33,7 @@ def isosurface(volume: np.ndarray,
         _current_figure,
         plottypes.isosurface.IsosurfaceApi,
         plottypes.isosurface.Isosurface,
-        volume
+        dict(volume=volume)
     )
     api_object.set_title(kwargs.get('title', 'Sci3D'))
 
@@ -42,6 +42,9 @@ def isosurface(volume: np.ndarray,
 
 def mesh(vertices: np.ndarray,
          triangles: np.ndarray,
+         normals: Optional[np.ndarray] = None,
+         colors: Optional[np.ndarray] = None,
+         pose: Optional[np.ndarray] = None,
          **kwargs) -> mesh.MeshApi:
     assert(vertices.ndim == 2)
     assert(vertices.shape[1] == 3)
@@ -51,12 +54,30 @@ def mesh(vertices: np.ndarray,
     assert(triangles.shape[1] == 3)
     assert(triangles.dtype == np.uint32)
 
+    if normals is not None:
+        assert(normals.ndim == 2)
+        assert(normals.shape[1] == 3)
+        assert(normals.dtype == np.float32)
+
+    if colors is not None:
+        assert(colors.ndim == 2)
+        assert(colors.shape[1] == 3)
+        assert(colors.dtype == np.float32)
+
+    if pose is not None:
+        assert(pose.ndim == 2)
+        assert(pose.shape == (4, 4))
+        assert(pose.dtype == np.float32)
+
     api_object = _add_surface_to_window(
         _current_figure,
         plottypes.mesh.MeshApi,
-        plottypes.mesh.Mesh,
-        {'vertices': vertices,
-         'triangles': triangles}
+        plottypes.mesh.MeshSurface,
+        dict(vertices=vertices,
+             triangles=triangles,
+             normals=normals,
+             colors=colors,
+             pose=pose)
     )
     api_object.set_title(kwargs.get('title', 'Sci3D'))
 
@@ -116,7 +137,7 @@ def _instantiate_window() -> Sci3DWindow:
 def _add_surface_to_window(window: Sci3DWindow,
                            api_ctor: Optional[Type[_api_types]],
                            plottype_ctor: Optional[Type[_plot_types]],
-                           *plottype_params
+                           plottype_params: Dict[str, object]
                            ) -> _api_types:
     finished = False
     api_object = None
@@ -129,7 +150,7 @@ def _add_surface_to_window(window: Sci3DWindow,
         nonlocal api_object
         nonlocal window
 
-        plottype_obj = plottype_ctor(_current_figure, *plottype_params)
+        plottype_obj = plottype_ctor(_current_figure, **plottype_params)
         _current_figure.add_plot_drawer(plottype_obj)
         api_object = api_ctor(_current_figure, plottype_obj)
 

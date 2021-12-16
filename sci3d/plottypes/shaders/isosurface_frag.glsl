@@ -84,12 +84,12 @@ vec3 apply_lights(vec3 surface_pos, vec3 normal)
 {
     vec3 output_color = vec3(0);
 
-    for(int light_idx = 0; light_idx < 4; ++light_idx) {
+    const int num_lights = 4;
+    for(int light_idx = 0; light_idx < num_lights; ++light_idx) {
         vec3 surface_to_light = light_pos[light_idx] - surface_pos;
-        //vec3 surface_to_light = light_pos - surface_pos;
         float s2l_distance = length(surface_to_light);
         float lambertian_intensity = max(0, dot(
-        normal, normalize(surface_to_light)
+            normal, normalize(surface_to_light)
         )) / s2l_distance;
         output_color += lambertian_intensity * light_color[light_idx];
     }
@@ -133,6 +133,8 @@ void main() {
     vec2 depth_remap = vec2(-(far + near) / (far - near), -2*far*near / (far - near));
 
     float fragment_depth = -dot(cam_forward, surface_pos - curr_pos_w);
-    float depth_01 = (fragment_depth * depth_remap.x + depth_remap.y) / -fragment_depth;
-    gl_FragDepth = depth_01;
+    // Right now, z is in the range [-1, 1]
+    float depth_minus1_1 = (fragment_depth * depth_remap.x + depth_remap.y) / -fragment_depth;
+    // Now we map it to [0, 1], which is the range of the depth buffer
+    gl_FragDepth = depth_minus1_1 * 0.5 + 0.5;
 }

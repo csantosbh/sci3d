@@ -1,7 +1,7 @@
 from typing import Optional
 from pathlib import Path
 from sci3d.window import Sci3DWindow
-from sci3d.common import get_projection_matrix
+from sci3d.common import get_projection_matrix, Mesh
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
@@ -11,68 +11,37 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 from sci3d.uithread import run_in_ui_thread
 
 
-class Mesh(object):
-    def __init__(self, window: Sci3DWindow, parameters: dict):
-        vertices: np.ndarray = parameters['vertices']
-        triangles: np.ndarray = parameters['triangles']
-
-        self._num_lights = 4
-
-        curr_path = Path(__file__).parent.resolve()
-
-        with open(curr_path / 'shaders/mesh_vert.glsl') as f:
-            vertex_shader = f.read()
-
-        with open(curr_path / 'shaders/mesh_frag.glsl') as f:
-            fragment_shader = f.read()
-
-        self._shader = Shader(
+class MeshSurface(object):
+    def __init__(self,
+                 window: Sci3DWindow,
+                 vertices: np.ndarray,
+                 triangles: np.ndarray,
+                 normals: Optional[np.ndarray],
+                 colors: Optional[np.ndarray],
+                 pose: Optional[np.ndarray]):
+        self._window = window
+        self._mesh = Mesh(
             # TODO create public accessor
             window._render_pass,
-            "mesh",
-            vertex_shader,
-            fragment_shader,
-            blend_mode=Shader.BlendMode.AlphaBlend
+            vertices, triangles, normals, colors, self._get_projection_matrix()
         )
-        self._texture = None
-        self._window = window
 
+        # TODO make lights part of the Window instead
         light_pos = np.eye(4, 3).astype(np.float32)
         light_color = np.eye(4, 3).astype(np.float32)
-        #self.set_lights(light_pos, light_color)
+        self._mesh.set_lights(light_pos, light_color)
+        self._object2world = pose if pose is not None else np.eye(4, dtype=np.float32)
 
-        self._triangle_count = triangles.shape[0]
-        self._shader.set_buffer("indices", triangles.flatten())
-        self._shader.set_buffer("position", vertices)
-
-        self._shader.set_buffer("projection", self._get_projection_matrix().T)
-
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if light_pos.shape[0] != self._num_lights:
-            light_pos = np.pad(light_pos, [[0, self._num_lights - light_pos.shape[0]], [0, 0]])
-        if light_color.shape[0] != self._num_lights:
-            light_color = np.pad(light_color, [[0, self._num_lights - light_color.shape[0]], [0, 0]])
-
-        self._shader.set_buffer("light_pos[0]", light_pos.flatten())
-        self._shader.set_buffer("light_color[0]", light_color.flatten())
-
-    def set_mesh(self,
-                 triangles: Optional[np.ndarray],
-                 vertices: Optional[np.ndarray]):
-        if triangles is not None:
-            self._triangle_count = triangles.shape[0]
-            self._shader.set_buffer("indices", triangles.flatten())
-
-        if vertices is not None:
-            self._shader.set_buffer("position", vertices)
+    @property
+    def mesh_object(self) -> Mesh:
+        return self._mesh
 
     def draw(self):
-        self._shader.set_buffer("object2camera", self._window.world2camera().T)
-        self._shader.set_buffer("projection", self._get_projection_matrix().T)
-
-        with self._shader:
-            self._shader.draw_array(
-                Shader.PrimitiveType.Triangle, 0, self._triangle_count * 3, True)
+        self._mesh.draw(
+            self._object2world,
+            self._window.world2camera(),
+            self._get_projection_matrix()
+        )
 
     def _get_projection_matrix(self):
         return get_projection_matrix(
@@ -85,7 +54,7 @@ class Mesh(object):
 
 
 class MeshApi(object):
-    def __init__(self, window: Sci3DWindow, plot_drawer: Mesh):
+    def __init__(self, window: Sci3DWindow, plot_drawer: MeshSurface):
         self._window = window
         self._plot_drawer = plot_drawer
 
@@ -97,7 +66,7 @@ class MeshApi(object):
             return
 
         def impl():
-            self._plot_drawer.set_lights(light_pos, light_color)
+            self._plot_drawer.mesh_object.set_lights(light_pos, light_color)
 
         run_in_ui_thread(impl)
 
@@ -105,6 +74,6 @@ class MeshApi(object):
                  triangles: Optional[np.ndarray] = None,
                  vertices: Optional[np.ndarray] = None):
         def impl():
-            self._plot_drawer.set_mesh(triangles, vertices)
+            self._plot_drawer.mesh_object.set_mesh(triangles, vertices)
 
         run_in_ui_thread(impl)
