@@ -12,27 +12,29 @@ uniform vec3 light_color[4];
 
 float sample_sdf(vec3 coordinate) {
     // Convert coordinate to left handed notation (texture coord system)
-    vec3 left_handed_coord = vec3(coordinate.x, coordinate.y, -coordinate.z);
+    vec3 left_handed_coord = vec3(coordinate.x, coordinate.y, -coordinate.z) + 0.5;
     return texture(scalar_field, left_handed_coord).r;
 }
 
 vec3 get_start_near_volume(vec3 start, vec3 ray_direction) {
     // Make rays start at the edge of the volume, even if camera is far away
-    vec3 far_corner = vec3(1, 1, -1);
+    vec3 far_corner = vec3(0.5, 0.5, 0.5);
+    vec3 near_corner = vec3(-0.5, -0.5, -0.5);
+
     float alpha = max(0,
-        min((-start.x) / ray_direction.x,
+        min((near_corner.x - start.x) / ray_direction.x,
             (far_corner.x - start.x) / ray_direction.x)
     );
     start += alpha * ray_direction;
 
     alpha = max(0,
-        min((-start.y) / ray_direction.y,
+        min((near_corner.y - start.y) / ray_direction.y,
             (far_corner.y - start.y) / ray_direction.y)
     );
     start += alpha * ray_direction;
 
     alpha = max(0,
-        min((-start.z) / ray_direction.z,
+        min((far_corner.z - start.z) / ray_direction.z,
             (far_corner.z - start.z) / ray_direction.z)
     );
     start += alpha * ray_direction;

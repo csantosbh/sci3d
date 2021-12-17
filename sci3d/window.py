@@ -207,6 +207,9 @@ class Sci3DWindow(Screen):
             self.set_visible(False)
             return True
 
+        if action == glfw.RELEASE:
+            self._rt_pos_data = self._rt_position.download()
+
         return False
 
     def scroll_event(self, p, rel):
@@ -241,9 +244,6 @@ class Sci3DWindow(Screen):
             ], axis=1)
             self._camera_rotation = common.orthonormalize(self._camera_rotation)
 
-            mouse_event_handled = True
-
-        if mouse_event_handled:
             self._update_tooltip_positions()
 
         return mouse_event_handled
@@ -280,11 +280,10 @@ class Sci3DWindow(Screen):
             speed *= 10
 
         if kb_event_handled:
-            self._update_tooltip_positions()
-            self._rt_pos_data = self._rt_position.download()
             eps = 1e-6
             movement_direction = movement_direction / (eps + np.linalg.norm(movement_direction))
             self._camera_position += speed * movement_direction
+            self._update_tooltip_positions()
 
     def _update_tooltip_positions(self):
         # Create camera matrix
