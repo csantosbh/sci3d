@@ -2,6 +2,8 @@ from typing import Optional
 from pathlib import Path
 from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
+from sci3d.api.basicsurface import BasicSurface
+from sci3d.common import BoundingBox
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
@@ -11,7 +13,7 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 from sci3d.uithread import run_in_ui_thread
 
 
-class MeshSurface(object):
+class MeshSurface(BasicSurface):
     def __init__(self,
                  window: Sci3DWindow,
                  vertices: np.ndarray,
@@ -19,7 +21,8 @@ class MeshSurface(object):
                  normals: Optional[np.ndarray],
                  colors: Optional[np.ndarray],
                  pose: Optional[np.ndarray]):
-        self._window = window
+        super(MeshSurface, self).__init__(window)
+
         self._mesh = Mesh(
             # TODO create public accessor
             window._render_pass,
@@ -35,6 +38,9 @@ class MeshSurface(object):
     @property
     def mesh_object(self) -> Mesh:
         return self._mesh
+
+    def get_bounding_box(self) -> BoundingBox:
+        return self._mesh.get_bounding_box()
 
     def draw(self):
         self._mesh.draw(
@@ -72,8 +78,9 @@ class MeshApi(object):
 
     def set_mesh(self,
                  triangles: Optional[np.ndarray] = None,
-                 vertices: Optional[np.ndarray] = None):
+                 vertices: Optional[np.ndarray] = None,
+                 normals: Optional[np.ndarray] = None):
         def impl():
-            self._plot_drawer.mesh_object.set_mesh(triangles, vertices)
+            self._plot_drawer.mesh_object.set_mesh(triangles, vertices, normals)
 
         run_in_ui_thread(impl)

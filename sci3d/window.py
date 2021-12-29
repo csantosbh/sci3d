@@ -2,9 +2,11 @@
 
 import nanogui
 import numpy as np
+from typing import List
 
 from sci3d.tooltip import Tooltip
 import sci3d.common as common
+from sci3d.api.basicsurface import BasicSurface
 
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D,\
@@ -94,7 +96,7 @@ class Sci3DWindow(Screen):
         self._camera_rotation = np.eye(3, dtype=np.float32)
         self._camera_position = np.zeros((3, 1), dtype=np.float32)
         self._camera_fov = np.array(45 * np.pi / 180, dtype=np.float32)
-        self._plot_drawers = []
+        self._plot_drawers: List[BasicSurface] = []
 
         # Events
         self._handle_mouse_down = None
@@ -143,8 +145,31 @@ class Sci3DWindow(Screen):
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
 
-    def add_plot_drawer(self, plot_drawer):
+    def _reset_camera(self):
+        if len(self._plot_drawers) > 0:
+            full_bbox = self._plot_drawers[0].get_bounding_box()
+            for drawer in self._plot_drawers[1:]:
+                full_bbox = full_bbox.union(drawer.get_bounding_box())
+
+            # Position camera in front of full_bbox
+            camera_xy = (
+                full_bbox.lower_bound[0:2] + full_bbox.upper_bound[0:2]
+            ) / 2
+            distance_factor = 0.6
+            z_offset = 0.5 * full_bbox.height/np.tan(distance_factor * self.camera_fov/2)
+            self._camera_position = np.concatenate([
+                camera_xy, full_bbox.upper_bound[2:3] + z_offset
+            ])[..., np.newaxis]
+        else:
+            self._camera_position = np.zeros((3, 1), dtype=np.float32)
+
+        self._camera_rotation = np.eye(3, dtype=np.float32)
+
+    def add_plot_drawer(self, plot_drawer: BasicSurface):
         self._plot_drawers.append(plot_drawer)
+
+        if True:  # TODO self._auto_position_camera
+            self._reset_camera()
 
     def world2camera(self):
         return common.inverse_affine(self._camera_rotation, self._camera_position)
@@ -209,6 +234,9 @@ class Sci3DWindow(Screen):
 
         if action == glfw.RELEASE:
             self._rt_pos_data = self._rt_position.download()
+
+        if key == glfw.KEY_F and action == glfw.PRESS:
+            self._reset_camera()
 
         return False
 

@@ -1,16 +1,20 @@
 from pathlib import Path
-from sci3d.window import Sci3DWindow
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
     Matrix4f
 
+from sci3d.window import Sci3DWindow
 from sci3d.uithread import run_in_ui_thread
+from sci3d.api.basicsurface import BasicSurface
+from sci3d.common import BoundingBox
 
 
-class Isosurface(object):
+class Isosurface(BasicSurface):
     def __init__(self, window: Sci3DWindow, volume: np.ndarray):
+        super(Isosurface, self).__init__(window)
+
         self._num_lights = 4
 
         curr_path = Path(__file__).parent.resolve()
@@ -45,8 +49,14 @@ class Isosurface(object):
             dtype=np.float32
         ))
 
-        self._window = window
         self.set_isosurface(volume)
+        self._bounding_box = BoundingBox(
+            np.array([-0.5, -0.5, -0.5], dtype=np.float32),
+            np.array([0.5, 0.5, 0.5], dtype=np.float32),
+        )
+
+    def get_bounding_box(self) -> BoundingBox:
+        return self._bounding_box
 
     def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
         if light_pos.shape[0] != self._num_lights:

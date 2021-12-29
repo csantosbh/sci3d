@@ -6,6 +6,38 @@ import numpy as np
 from nanogui import Shader
 
 
+class BoundingBox(object):
+    lower_bound: np.ndarray
+    upper_bound: np.ndarray
+
+    def __init__(self, lower_bound, upper_bound):
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+
+    @property
+    def center(self):
+        return (self.lower_bound + self.upper_bound) / 2
+
+    @property
+    def width(self):
+        return self.upper_bound[0] - self.lower_bound[0]
+
+    @property
+    def height(self):
+        return self.upper_bound[1] - self.lower_bound[1]
+
+    @property
+    def depth(self):
+        return self.upper_bound[2] - self.lower_bound[2]
+
+    def union(self, other):
+        result = BoundingBox(
+            np.minimum(self.lower_bound, other.lower_bound),
+            np.maximum(self.upper_bound, other.upper_bound),
+        )
+        return result
+
+
 def get_projection_matrix(near: float,
                           far: float,
                           fov: float,
@@ -157,6 +189,14 @@ class Mesh(object):
         self._shader.set_buffer('normal', normals)
         self._shader.set_buffer('color', colors)
 
+        self._bounding_box = BoundingBox(
+            np.min(vertices, axis=0),
+            np.max(vertices, axis=0)
+        )
+
+    def get_bounding_box(self) -> BoundingBox:
+        return self._bounding_box
+
     def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
         if light_pos.shape[0] != self._num_lights:
             light_pos = np.pad(light_pos, [[0, self._num_lights - light_pos.shape[0]], [0, 0]])
@@ -177,6 +217,8 @@ class Mesh(object):
 
         if vertices is not None:
             self._shader.set_buffer("position", vertices)
+            self._bounding_box.lower_bound = np.min(vertices, axis=1)
+            self._bounding_box.upper_bound = np.max(vertices, axis=1)
 
         if normals is not None:
             self._shader.set_buffer("normal", normals)
@@ -228,5 +270,3 @@ class Mesh(object):
 
         # Arrange normals in order of vertices as they appear in triangle list
         return normals
-
-
