@@ -7,7 +7,7 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 
 from sci3d.window import Sci3DWindow
 from sci3d.uithread import run_in_ui_thread
-from sci3d.api.basicsurface import BasicSurface
+from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi
 from sci3d.common import BoundingBox
 
 
@@ -96,10 +96,11 @@ class Isosurface(BasicSurface):
             self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
 
-class IsosurfaceApi(object):
+class IsosurfaceApi(BasicSurfaceApi):
+    _plot_drawer: Isosurface
+
     def __init__(self, window: Sci3DWindow, plot_drawer: Isosurface):
-        self._window = window
-        self._plot_drawer = plot_drawer
+        super(IsosurfaceApi, self).__init__(window, plot_drawer)
 
     def set_isosurface(self, volume):
         if not self._window.visible():
@@ -110,14 +111,3 @@ class IsosurfaceApi(object):
 
         run_in_ui_thread(impl)
 
-    def set_title(self, title):
-        self._window.set_caption(title)
-
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if not self._window.visible():
-            return
-
-        def impl():
-            self._plot_drawer.set_lights(light_pos, light_color)
-
-        run_in_ui_thread(impl)

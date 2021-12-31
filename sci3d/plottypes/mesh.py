@@ -2,7 +2,7 @@ from typing import Optional
 from pathlib import Path
 from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
-from sci3d.api.basicsurface import BasicSurface
+from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi
 from sci3d.common import BoundingBox
 
 import numpy as np
@@ -35,6 +35,9 @@ class MeshSurface(BasicSurface):
         self._mesh.set_lights(light_pos, light_color)
         self._object2world = pose if pose is not None else np.eye(4, dtype=np.float32)
 
+    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
+        self._mesh.set_lights(light_pos, light_color)
+
     @property
     def mesh_object(self) -> Mesh:
         return self._mesh
@@ -59,22 +62,9 @@ class MeshSurface(BasicSurface):
         )
 
 
-class MeshApi(object):
+class MeshApi(BasicSurfaceApi):
     def __init__(self, window: Sci3DWindow, plot_drawer: MeshSurface):
-        self._window = window
-        self._plot_drawer = plot_drawer
-
-    def set_title(self, title):
-        self._window.set_caption(title)
-
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if not self._window.visible():
-            return
-
-        def impl():
-            self._plot_drawer.mesh_object.set_lights(light_pos, light_color)
-
-        run_in_ui_thread(impl)
+        super(MeshApi, self).__init__(window, plot_drawer)
 
     def set_mesh(self,
                  triangles: Optional[np.ndarray] = None,

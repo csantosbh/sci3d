@@ -11,6 +11,16 @@ icecream.install()
 
 resolution = 128j
 
+### TODOs
+"""
+Allow set object position/rotation on API
+Adicionar grid xz
+Disable face culling
+Scatter plot
+Resolver TODO
+README
+Deploy/publish v0
+"""
 # Make cube
 buff = np.mgrid[0:1:resolution, 0:1:resolution, 0:1:resolution].astype(np.float32)
 cube = np.maximum(
@@ -49,8 +59,8 @@ indices = np.array([
     [4, 7, 0],
 ], dtype=np.uint32)
 
-s2 = s3d.mesh(vertices + np.array([[1,1,0]], dtype=np.float32), indices)
-s1 = s3d.isosurface(cube, title='cube')
+s2 = s3d.mesh(vertices + np.array([[1, 1, 0]], dtype=np.float32), indices)
+s1 = s3d.isosurface(cube, s3d.Params(window_title='cube'))
 
 t = 0
 dt = 1.0/60.0

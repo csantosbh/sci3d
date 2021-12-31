@@ -6,7 +6,7 @@ from typing import List
 
 from sci3d.tooltip import Tooltip
 import sci3d.common as common
-from sci3d.api.basicsurface import BasicSurface
+from sci3d.api.basicsurface import BasicSurface, Params
 
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D,\
@@ -145,30 +145,21 @@ class Sci3DWindow(Screen):
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
 
-    def _reset_camera(self):
-        if len(self._plot_drawers) > 0:
-            full_bbox = self._plot_drawers[0].get_bounding_box()
-            for drawer in self._plot_drawers[1:]:
-                full_bbox = full_bbox.union(drawer.get_bounding_box())
-
-            # Position camera in front of full_bbox
-            camera_xy = (
-                full_bbox.lower_bound[0:2] + full_bbox.upper_bound[0:2]
-            ) / 2
-            distance_factor = 0.6
-            z_offset = 0.5 * full_bbox.height/np.tan(distance_factor * self.camera_fov/2)
-            self._camera_position = np.concatenate([
-                camera_xy, full_bbox.upper_bound[2:3] + z_offset
-            ])[..., np.newaxis]
-        else:
-            self._camera_position = np.zeros((3, 1), dtype=np.float32)
-
-        self._camera_rotation = np.eye(3, dtype=np.float32)
-
-    def add_plot_drawer(self, plot_drawer: BasicSurface):
+    def add_plot_drawer(self,
+                        plot_drawer: BasicSurface,
+                        common_params: Params):
         self._plot_drawers.append(plot_drawer)
 
-        if True:  # TODO self._auto_position_camera
+        override_camera_pose = (
+            common_params.camera_position is not None or
+            common_params.camera_rotation is not None
+        )
+        if override_camera_pose:
+            if common_params.camera_position is not None:
+                self._camera_position = common_params.camera_position
+            if common_params.camera_rotation is not None:
+                self._camera_rotation = common_params.camera_rotation
+        elif common_params.reset_camera:
             self._reset_camera()
 
     def world2camera(self):
@@ -275,6 +266,27 @@ class Sci3DWindow(Screen):
             self._update_tooltip_positions()
 
         return mouse_event_handled
+
+    def _reset_camera(self):
+        if len(self._plot_drawers) > 0:
+            full_bbox = self._plot_drawers[0].get_bounding_box()
+            for drawer in self._plot_drawers[1:]:
+                full_bbox = full_bbox.union(drawer.get_bounding_box())
+
+            # Position camera in front of full_bbox
+            camera_xy = (
+                                full_bbox.lower_bound[0:2] + full_bbox.upper_bound[0:2]
+                        ) / 2
+            distance_factor = 0.6
+            z_offset = 0.5 * full_bbox.height/np.tan(distance_factor * self.camera_fov/2)
+            self._camera_position = np.concatenate([
+                camera_xy, full_bbox.upper_bound[2:3] + z_offset
+            ])[..., np.newaxis]
+        else:
+            self._camera_position = np.zeros((3, 1), dtype=np.float32)
+
+        self._scale_power = 0
+        self._camera_rotation = np.eye(3, dtype=np.float32)
 
     def _update_camera_position(self):
         ctrl_keys = {

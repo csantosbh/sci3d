@@ -23,9 +23,9 @@ cube = np.maximum(
 buff = np.mgrid[-1:1:resolution, -1:1:resolution, -1:1:resolution].astype(np.float32)
 sphere = np.linalg.norm(buff, 2, 0) - 0.5
 
-s1 = s3d.isosurface(cube, title='cube')
+s1 = s3d.isosurface(cube, s3d.Params(window_title='cube'))
 s3d.figure()
-s2 = s3d.isosurface(sphere, title='sphere')
+s2 = s3d.isosurface(sphere, s3d.Params(window_title='sphere'))
 
 t = 0
 dt = 1.0/60.0
