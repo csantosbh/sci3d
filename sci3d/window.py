@@ -39,7 +39,9 @@ class Gizmo(object):
         light_color = np.zeros((4, 3)).astype(np.float32)
         light_color[0, :] = 1
 
-        mesh.set_lights(light_pos, light_color)
+        material = mesh.get_material()
+        material.shader.set_buffer("light_pos[0]", light_pos.flatten())
+        material.shader.set_buffer("light_color[0]", light_color.flatten())
         return mesh
 
     def __init__(self, window):
@@ -69,7 +71,8 @@ class Gizmo(object):
             np.array([[-x, -y, -depth]], dtype=np.float32).T
         )
         world2camera = np.eye(4, dtype=np.float32)
-        [m.draw(object2world, world2camera, self._projection) for m in self._meshes]
+        [m.get_material().shader.set_buffer("object2world", object2world.T) for m in self._meshes]
+        [m.draw(world2camera, self._projection) for m in self._meshes]
 
 
 class Sci3DWindow(Screen):

@@ -5,6 +5,8 @@ import numpy as np
 
 from nanogui import Shader
 
+from sci3d.materials import Material
+
 
 class BoundingBox(object):
     lower_bound: np.ndarray
@@ -154,10 +156,6 @@ def cone(radius: float,
 
 class Mesh(object):
     def __init__(self, render_pass, vertices, triangles, normals, colors, projection):
-        self._num_lights = 4
-
-        curr_path = Path(__file__).parent.resolve()
-
         if colors is None:
             colors = np.ones_like(vertices)
 
@@ -167,27 +165,20 @@ class Mesh(object):
             )
             normals = self._compute_normals(vertices, triangles)
 
-        with open(curr_path / 'plottypes/shaders/mesh_vert.glsl') as f:
-            vertex_shader = f.read()
-
-        with open(curr_path / 'plottypes/shaders/mesh_frag.glsl') as f:
-            fragment_shader = f.read()
-
-        self._shader = Shader(
+        self._material = Material(
             render_pass,
-            "mesh",
-            vertex_shader,
-            fragment_shader,
-            blend_mode=Shader.BlendMode.AlphaBlend
+            'mesh',
+            'mesh_vert.glsl',
+            'mesh_frag.glsl'
         )
         self._texture = None
 
         self._triangle_count = triangles.shape[0]
-        self._shader.set_buffer('indices', triangles.flatten())
-        self._shader.set_buffer('position', vertices)
-        self._shader.set_buffer('projection', projection)
-        self._shader.set_buffer('normal', normals)
-        self._shader.set_buffer('color', colors)
+        self._material.shader.set_buffer('indices', triangles.flatten())
+        self._material.shader.set_buffer('position', vertices)
+        self._material.shader.set_buffer('projection', projection)
+        self._material.shader.set_buffer('normal', normals)
+        self._material.shader.set_buffer('color', colors)
 
         self._bounding_box = BoundingBox(
             np.min(vertices, axis=0),
@@ -197,15 +188,8 @@ class Mesh(object):
     def get_bounding_box(self) -> BoundingBox:
         return self._bounding_box
 
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if light_pos.shape[0] != self._num_lights:
-            light_pos = np.pad(light_pos, [[0, self._num_lights - light_pos.shape[0]], [0, 0]])
-
-        if light_color.shape[0] != self._num_lights:
-            light_color = np.pad(light_color, [[0, self._num_lights - light_color.shape[0]], [0, 0]])
-
-        self._shader.set_buffer("light_pos[0]", light_pos.flatten())
-        self._shader.set_buffer("light_color[0]", light_color.flatten())
+    def get_material(self) -> Shader:
+        return self._material
 
     def set_mesh(self,
                  triangles: Optional[np.ndarray],
@@ -213,26 +197,24 @@ class Mesh(object):
                  normals: Optional[np.ndarray]):
         if triangles is not None:
             self._triangle_count = triangles.shape[0]
-            self._shader.set_buffer("indices", triangles.flatten())
+            self._material.shader.set_buffer("indices", triangles.flatten())
 
         if vertices is not None:
-            self._shader.set_buffer("position", vertices)
+            self._material.shader.set_buffer("position", vertices)
             self._bounding_box.lower_bound = np.min(vertices, axis=1)
             self._bounding_box.upper_bound = np.max(vertices, axis=1)
 
         if normals is not None:
-            self._shader.set_buffer("normal", normals)
+            self._material.shader.set_buffer("normal", normals)
 
     def draw(self,
-             object2world: np.ndarray,
              world2camera: np.ndarray,
              projection: np.ndarray):
-        self._shader.set_buffer("object2world", object2world.T)
-        self._shader.set_buffer("world2camera", world2camera.T)
-        self._shader.set_buffer("projection", projection.T)
+        self._material.shader.set_buffer("world2camera", world2camera.T)
+        self._material.shader.set_buffer("projection", projection.T)
 
-        with self._shader:
-            self._shader.draw_array(
+        with self._material.shader:
+            self._material.shader.draw_array(
                 Shader.PrimitiveType.Triangle, 0, self._triangle_count * 3, True)
 
     def _make_triangles_unique(self, vertices, triangles, colors):

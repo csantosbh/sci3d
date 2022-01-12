@@ -46,7 +46,6 @@ def mesh(vertices: np.ndarray,
          triangles: np.ndarray,
          normals: Optional[np.ndarray] = None,
          colors: Optional[np.ndarray] = None,
-         pose: Optional[np.ndarray] = None,
          common_params: Params = Params()
          ) -> plottypes.mesh.MeshApi:
     assert(vertices.ndim == 2)
@@ -67,11 +66,6 @@ def mesh(vertices: np.ndarray,
         assert(colors.shape[1] == 3)
         assert(colors.dtype == np.float32)
 
-    if pose is not None:
-        assert(pose.ndim == 2)
-        assert(pose.shape == (4, 4))
-        assert(pose.dtype == np.float32)
-
     api_object = _add_surface_to_window(
         _current_window,
         plottypes.mesh.MeshApi,
@@ -79,8 +73,7 @@ def mesh(vertices: np.ndarray,
         dict(vertices=vertices,
              triangles=triangles,
              normals=normals,
-             colors=colors,
-             pose=pose),
+             colors=colors),
         common_params
     )
 
@@ -144,7 +137,7 @@ def _add_surface_to_window(target_window: Sci3DWindow,
                            common_params: Params,
                            ) -> _api_types:
     finished = False
-    api_object: BasicSurfaceApi = None
+    api_object: Optional[BasicSurfaceApi] = None
 
     # Create window if none exist
     if len(_figures) == 0:
@@ -154,7 +147,7 @@ def _add_surface_to_window(target_window: Sci3DWindow,
         nonlocal api_object
         nonlocal target_window
 
-        plottype_obj = plottype_ctor(target_window, **plottype_params)
+        plottype_obj = plottype_ctor(target_window, common_params, **plottype_params)
         target_window.add_plot_drawer(plottype_obj, common_params)
         api_object = api_ctor(target_window, plottype_obj)
 

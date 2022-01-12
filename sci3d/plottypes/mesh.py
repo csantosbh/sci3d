@@ -2,8 +2,8 @@ from typing import Optional
 from pathlib import Path
 from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
-from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi
-from sci3d.common import BoundingBox
+from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi, Params
+import sci3d.common as common
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
@@ -16,12 +16,12 @@ from sci3d.uithread import run_in_ui_thread
 class MeshSurface(BasicSurface):
     def __init__(self,
                  window: Sci3DWindow,
+                 common_params: Params,
                  vertices: np.ndarray,
                  triangles: np.ndarray,
                  normals: Optional[np.ndarray],
-                 colors: Optional[np.ndarray],
-                 pose: Optional[np.ndarray]):
-        super(MeshSurface, self).__init__(window)
+                 colors: Optional[np.ndarray]):
+        super(MeshSurface, self).__init__(window, common_params)
 
         self._mesh = Mesh(
             # TODO create public accessor
@@ -29,25 +29,24 @@ class MeshSurface(BasicSurface):
             vertices, triangles, normals, colors, self._get_projection_matrix()
         )
 
-        # TODO make lights part of the Window instead
-        light_pos = np.eye(4, 3).astype(np.float32)
-        light_color = np.eye(4, 3).astype(np.float32)
-        self._mesh.set_lights(light_pos, light_color)
-        self._object2world = pose if pose is not None else np.eye(4, dtype=np.float32)
+        self.post_init()
 
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        self._mesh.set_lights(light_pos, light_color)
+    def get_material(self) -> Shader:
+        return self._mesh.get_material()
 
     @property
     def mesh_object(self) -> Mesh:
         return self._mesh
 
-    def get_bounding_box(self) -> BoundingBox:
+    def get_bounding_box(self) -> common.BoundingBox:
         return self._mesh.get_bounding_box()
 
     def draw(self):
+        object2world = common.inverse_affine(self._object_rotation, self._object_position)
+        # TODO move to Mesh
+        self._mesh.get_material().set_buffer("object2world", object2world.T)
+
         self._mesh.draw(
-            self._object2world,
             self._window.world2camera(),
             self._get_projection_matrix()
         )

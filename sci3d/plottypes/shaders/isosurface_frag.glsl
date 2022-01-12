@@ -4,7 +4,8 @@ layout(location = 0) out vec4 color;
 layout(location = 1) out vec4 out_surface_position;
 
 uniform sampler3D scalar_field;
-uniform mat4 camera2world;
+uniform mat4 world2object;
+uniform mat4 camera2object;
 uniform float image_resolution;
 uniform float camera_fov;
 uniform vec3 light_pos[4];
@@ -34,7 +35,7 @@ vec3 get_start_near_volume(vec3 start, vec3 ray_direction) {
     start += alpha * ray_direction;
 
     alpha = max(0,
-        min((far_corner.z - start.z) / ray_direction.z,
+        min((near_corner.z - start.z) / ray_direction.z,
             (far_corner.z - start.z) / ray_direction.z)
     );
     start += alpha * ray_direction;
@@ -102,14 +103,14 @@ vec3 apply_lights(vec3 surface_pos, vec3 normal)
 void main() {
     float near_plane_side = tan(camera_fov * 0.5);
     vec3 curr_pos_l = vec3(screen_coords_01 * near_plane_side, -1);
-    vec3 curr_pos_w = (camera2world * vec4(0, 0, 0, 1)).xyz;
-    vec3 cam_forward = (camera2world * vec4(0, 0, -1, 0)).xyz;
+    vec3 curr_pos_w = (camera2object * vec4(0, 0, 0, 1)).xyz;
+    vec3 cam_forward = (camera2object * vec4(0, 0, -1, 0)).xyz;
 
     // Hide fragment if inside volume
     color.a = max(0, sign(sample_sdf(curr_pos_w.xyz)));
 
     // perspective direction
-    vec4 curr_dir = camera2world * vec4(
+    vec4 curr_dir = camera2object * vec4(
         normalize(curr_pos_l),
         0
     );

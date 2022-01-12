@@ -7,41 +7,29 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
 
 from sci3d.window import Sci3DWindow
 from sci3d.uithread import run_in_ui_thread
-from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi
-from sci3d.common import BoundingBox
+from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi, Params
+import sci3d.common as common
+from sci3d.materials import Material
 
 
 class Isosurface(BasicSurface):
-    def __init__(self, window: Sci3DWindow, volume: np.ndarray):
-        super(Isosurface, self).__init__(window)
+    def __init__(self,
+                 window: Sci3DWindow,
+                 common_params: Params,
+                 volume: np.ndarray):
+        super(Isosurface, self).__init__(window, common_params)
 
-        self._num_lights = 4
-
-        curr_path = Path(__file__).parent.resolve()
-
-        with open(curr_path / 'shaders/isosurface_vert.glsl') as f:
-            vertex_shader = f.read()
-
-        with open(curr_path / 'shaders/isosurface_frag.glsl') as f:
-            fragment_shader = f.read()
-
-        self._shader = Shader(
+        self._material = Material(
             # TODO create public accessor
             window._render_pass,
-            "isosurface",
-            vertex_shader,
-            fragment_shader,
-            blend_mode=Shader.BlendMode.AlphaBlend
+            'isosurface',
+            'isosurface_vert.glsl',
+            'isosurface_frag.glsl',
         )
         self._texture = None
 
-        light_pos = np.eye(4, 3).astype(np.float32)
-        light_color = np.eye(4, 3).astype(np.float32)
-        self.set_lights(light_pos, light_color)
-        self._shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
-
-        self._shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
-        self._shader.set_buffer("position", np.array(
+        self._material.shader.set_buffer("indices", np.array([0, 1, 2, 2, 3, 0], dtype=np.uint32))
+        self._material.shader.set_buffer("position", np.array(
             [[-1, -1, 0],
              [1, -1, 0],
              [1, 1, 0],
@@ -50,22 +38,20 @@ class Isosurface(BasicSurface):
         ))
 
         self.set_isosurface(volume)
-        self._bounding_box = BoundingBox(
+        self._bounding_box = common.BoundingBox(
             np.array([-0.5, -0.5, -0.5], dtype=np.float32),
             np.array([0.5, 0.5, 0.5], dtype=np.float32),
         )
 
-    def get_bounding_box(self) -> BoundingBox:
+        self._material.shader.set_buffer("scale_factor", np.array(1.0, dtype=np.float32))
+
+        self.post_init()
+
+    def get_bounding_box(self) -> common.BoundingBox:
         return self._bounding_box
 
-    def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
-        if light_pos.shape[0] != self._num_lights:
-            light_pos = np.pad(light_pos, [[0, self._num_lights - light_pos.shape[0]], [0, 0]])
-        if light_color.shape[0] != self._num_lights:
-            light_color = np.pad(light_color, [[0, self._num_lights - light_color.shape[0]], [0, 0]])
-
-        self._shader.set_buffer("light_pos[0]", light_pos.flatten())
-        self._shader.set_buffer("light_color[0]", light_color.flatten())
+    def get_material(self) -> Shader:
+        return self._material.shader
 
     def set_isosurface(self, volume):
         self._window.make_context_current()
@@ -77,8 +63,8 @@ class Isosurface(BasicSurface):
                 wrap_mode=Texture.WrapMode.ClampToEdge
             )
 
-            self._shader.set_texture3d("scalar_field", self._texture)
-            self._shader.set_buffer(
+            self._material.shader.set_texture3d("scalar_field", self._texture)
+            self._material.shader.set_buffer(
                 "image_resolution", np.array(volume.shape[0], dtype=np.float32))
 
         self._texture.upload(volume)
@@ -87,13 +73,16 @@ class Isosurface(BasicSurface):
         s = self._window.size()
         view_scale = Matrix4f.scale([1, s[0] / s[1], 1])
         mvp = view_scale
-        self._shader.set_buffer("mvp", np.float32(mvp).T)
-        self._shader.set_buffer("camera2world", self._window.camera2world().T)
-        self._shader.set_buffer("camera_fov", self._window.camera_fov)
-        self._shader.set_buffer("scale_factor", self._window.scale_factor)
 
-        with self._shader:
-            self._shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
+        self._material.shader.set_buffer("mvp", np.float32(mvp).T)
+        world2object = common.inverse_affine(self._object_rotation, self._object_position)
+        camera2object = world2object @ self._window.camera2world()
+        self._material.shader.set_buffer("camera2object", camera2object.T)
+        self._material.shader.set_buffer("camera_fov", self._window.camera_fov)
+        self._material.shader.set_buffer("scale_factor", self._window.scale_factor)
+
+        with self._material.shader:
+            self._material.shader.draw_array(Shader.PrimitiveType.Triangle, 0, 6, True)
 
 
 class IsosurfaceApi(BasicSurfaceApi):
