@@ -41,7 +41,7 @@ class BasicSurface(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_material(self) -> Shader:
+    def get_material(self) -> materials.Material:
         raise NotImplementedError
 
     def post_init(self):
@@ -49,6 +49,12 @@ class BasicSurface(abc.ABC):
         light_pos = np.eye(4, 3).astype(np.float32)
         light_color = np.eye(4, 3).astype(np.float32)
         self.set_lights(light_pos, light_color)
+
+    def set_transform(self,
+                      position: np.ndarray,
+                      rotation: np.ndarray):
+        self._object_position = position
+        self._object_rotation = rotation
 
     def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
         if light_pos.shape[0] != self._num_lights:
@@ -58,8 +64,8 @@ class BasicSurface(abc.ABC):
             light_color = np.pad(light_color, [[0, self._num_lights - light_color.shape[0]], [0, 0]])
 
         material = self.get_material()
-        material.set_buffer("light_pos[0]", light_pos.flatten())
-        material.set_buffer("light_color[0]", light_color.flatten())
+        material.shader.set_buffer("light_pos[0]", light_pos.flatten())
+        material.shader.set_buffer("light_color[0]", light_color.flatten())
 
 
 class BasicSurfaceApi(abc.ABC):
@@ -69,6 +75,9 @@ class BasicSurfaceApi(abc.ABC):
 
     def set_title(self, title):
         self._window.set_caption(title)
+
+    def set_transform(self, position, rotation):
+        self._plot_drawer.set_transform(position, rotation)
 
     def set_lights(self, light_pos: np.ndarray, light_color: np.ndarray):
         if not self._window.visible():

@@ -50,8 +50,8 @@ class Isosurface(BasicSurface):
     def get_bounding_box(self) -> common.BoundingBox:
         return self._bounding_box
 
-    def get_material(self) -> Shader:
-        return self._material.shader
+    def get_material(self) -> Material:
+        return self._material
 
     def set_isosurface(self, volume):
         self._window.make_context_current()

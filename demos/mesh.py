@@ -59,7 +59,14 @@ indices = np.array([
     [4, 7, 0],
 ], dtype=np.uint32)
 
-s2 = s3d.mesh(vertices + np.array([[1, 1, 0]], dtype=np.float32), indices)
+tst = np.array([[1, 1, 0]], dtype=np.float32)
+s2 = s3d.mesh(vertices, indices, common_params=s3d.Params(
+    object_position=np.array([[0,1,0]], dtype=np.float32).T,
+    object_rotation=s3d.look_at(
+        np.array([[0.5, 0, 0.5]], dtype=np.float32).T,
+        np.array([[0, 1, 0]], dtype=np.float32).T,
+    ),
+))
 s1 = s3d.isosurface(cube, s3d.Params(window_title='cube'))
 
 t = 0
@@ -77,6 +84,11 @@ while s3d.get_window_count() > 0:
     ], dtype=np.float32)
     #s1.set_lights(cube_light_pos, cube_light_color)
     #s2.set_mesh(vertices=(vertices + np.array([[np.cos(t*0.2)/10, 0, 0]], dtype=np.float32)))
+    s1.set_transform(
+        np.array([[0, 0, 0]], dtype=np.float32).T,
+        s3d.look_at(np.array([[np.cos(t), 0, np.sin(t)]], dtype=np.float32).T,
+        np.array([[0, 1, 0]], dtype=np.float32).T)
+    )
 
     time.sleep(dt)
     t += dt * 3

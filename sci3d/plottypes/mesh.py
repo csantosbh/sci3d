@@ -4,6 +4,7 @@ from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
 from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi, Params
 import sci3d.common as common
+import sci3d.materials as materials
 
 import numpy as np
 from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
@@ -31,7 +32,7 @@ class MeshSurface(BasicSurface):
 
         self.post_init()
 
-    def get_material(self) -> Shader:
+    def get_material(self) -> materials.Material:
         return self._mesh.get_material()
 
     @property
@@ -42,9 +43,9 @@ class MeshSurface(BasicSurface):
         return self._mesh.get_bounding_box()
 
     def draw(self):
-        object2world = common.inverse_affine(self._object_rotation, self._object_position)
+        object2world = common.forward_affine(self._object_rotation, self._object_position)
         # TODO move to Mesh
-        self._mesh.get_material().set_buffer("object2world", object2world.T)
+        self._mesh.get_material().shader.set_buffer("object2world", object2world.T)
 
         self._mesh.draw(
             self._window.world2camera(),

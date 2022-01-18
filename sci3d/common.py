@@ -188,7 +188,7 @@ class Mesh(object):
     def get_bounding_box(self) -> BoundingBox:
         return self._bounding_box
 
-    def get_material(self) -> Shader:
+    def get_material(self) -> Material:
         return self._material
 
     def set_mesh(self,
