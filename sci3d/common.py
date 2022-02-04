@@ -155,7 +155,9 @@ def cone(radius: float,
 
 
 class Mesh(object):
-    def __init__(self, render_pass, vertices, triangles, normals, colors, projection):
+    def __init__(self,
+                 render_pass, vertices, triangles, normals, colors, projection,
+                 ):
         if colors is None:
             colors = np.ones_like(vertices)
 
@@ -233,6 +235,7 @@ class Mesh(object):
 
         vertices = make_component_unique(vertices)
         colors = make_component_unique(colors)
+
         triangles = np.arange(vertices.shape[0]).reshape((-1, 3)).astype(np.uint32)
 
         return vertices, triangles, colors
@@ -252,3 +255,55 @@ class Mesh(object):
 
         # Arrange normals in order of vertices as they appear in triangle list
         return normals
+
+
+class Wireframe(object):
+    def __init__(self,
+                 render_pass, vertices, indices, colors, projection):
+        if colors is None:
+            colors = np.ones_like(vertices)
+
+        self._material = Material(
+            render_pass,
+            'wireframe',
+            'wireframe_vert.glsl',
+            'wireframe_frag.glsl'
+        )
+        self._line_count = indices.shape[0]
+        self._material.shader.set_buffer('indices', indices.flatten())
+        self._material.shader.set_buffer('position', vertices)
+        self._material.shader.set_buffer('projection', projection)
+        self._material.shader.set_buffer('color', colors)
+
+        self._bounding_box = BoundingBox(
+            np.min(vertices, axis=0),
+            np.max(vertices, axis=0)
+        )
+
+    def get_bounding_box(self) -> BoundingBox:
+        return self._bounding_box
+
+    def get_material(self) -> Material:
+        return self._material
+
+    def set_mesh(self,
+                 indices: Optional[np.ndarray],
+                 vertices: Optional[np.ndarray]):
+        if indices is not None:
+            self._line_count = indices.shape[0]
+            self._material.shader.set_buffer("indices", indices.flatten())
+
+        if vertices is not None:
+            self._material.shader.set_buffer("position", vertices)
+            self._bounding_box.lower_bound = np.min(vertices, axis=1)
+            self._bounding_box.upper_bound = np.max(vertices, axis=1)
+
+    def draw(self,
+             world2camera: np.ndarray,
+             projection: np.ndarray):
+        self._material.shader.set_buffer("world2camera", world2camera.T)
+        self._material.shader.set_buffer("projection", projection.T)
+
+        with self._material.shader:
+            self._material.shader.draw_array(
+                Shader.PrimitiveType.Line, 0, self._line_count * 2, True)

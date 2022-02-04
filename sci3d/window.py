@@ -13,6 +13,37 @@ from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Matrix4f, glfw, icons
 
 
+class Grid(object):
+    def __init__(self, window):
+        self._window = window
+
+        vertices = np.concatenate([
+            np.reshape(np.transpose(np.mgrid[-10:10:40j, 0:0:1j, -10:10:2j], [1, 2, 3, 0]), [-1, 3]),
+            np.reshape(np.transpose(np.mgrid[-10:10:2j, 0:0:1j, -10:10:40j], [3, 2, 1, 0]), [-1, 3])
+        ], 0).astype(np.float32)
+
+        indices = np.arange(vertices.shape[0]).reshape((-1, 2)).astype(np.uint32)
+        self._projection = common.get_projection_matrix(
+            near=0.1,
+            far=1e3,
+            fov=window.camera_fov,
+            hw_ratio=window.size()[1] / window.size()[0],
+            scale_factor=1,
+        )
+        self._grid = common.Wireframe(
+            window._render_pass,
+            vertices,
+            indices,
+            np.full_like(vertices, 0.20), self._projection
+        )
+
+    def draw(self):
+        object2world = np.eye(4, dtype=np.float32)
+        world2camera = self._window.world2camera()
+        self._grid.get_material().shader.set_buffer("object2world", object2world.T)
+        self._grid.draw(world2camera, self._projection)
+
+
 class Gizmo(object):
     def _make_axis(self,
                    rotation: np.ndarray,
@@ -144,6 +175,7 @@ class Sci3DWindow(Screen):
 
         # Additional UI
         self._gizmo = Gizmo(self)
+        self._grid = Grid(self)
 
         # We currently only support opengl
         assert(nanogui.api == 'opengl')
@@ -187,6 +219,7 @@ class Sci3DWindow(Screen):
                 plot_drawer.draw()
 
             self._gizmo.draw()
+            self._grid.draw()
 
         # Initialize world position buffer
         if self._rt_pos_data is None:
