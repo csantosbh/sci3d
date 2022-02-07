@@ -34,7 +34,7 @@ class Grid(object):
             window._render_pass,
             vertices,
             indices,
-            np.full_like(vertices, 0.20), self._projection
+            np.full_like(vertices, 0.2784), self._projection
         )
 
     def draw(self):
@@ -59,8 +59,7 @@ class Gizmo(object):
 
         colors = np.repeat([color], vertices.shape[0], axis=0).astype(np.float32)
         mesh = common.Mesh(
-            # TODO create public accessor
-            self._window._render_pass,
+            self._window.render_pass,
             vertices, triangles, None, colors,
             self._projection
         )
@@ -123,6 +122,10 @@ class Sci3DWindow(Screen):
     def scale_factor(self):
         return np.array(0.95 ** self._scale_power, dtype=np.float32)
 
+    @property
+    def render_pass(self):
+        return self._render_pass
+
     def __init__(self, size=(1024, 768), title='Sci3D'):
         super(Sci3DWindow, self).__init__(size, title)
 
@@ -144,12 +147,10 @@ class Sci3DWindow(Screen):
         self.perform_layout()
 
         self._rt_color = Texture(
-            # TODO we dont need rgba
-            Texture.PixelFormat.RGBA,
+            Texture.PixelFormat.RGB,
             Texture.ComponentFormat.UInt8,
             # TODO recreate texture when size changes
             self.size(),
-            # TODO using shaderread has implications that I'm not sure I want
             flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
         )
         self._rt_position = Texture(
@@ -157,7 +158,6 @@ class Sci3DWindow(Screen):
             Texture.ComponentFormat.Float32,
             # TODO recreate texture when size changes
             self.size(),
-            # TODO using shaderread has implications that I'm not sure I want
             flags=Texture.TextureFlags.ShaderRead | Texture.TextureFlags.RenderTarget
         )
         self._rt_depth = Texture(
@@ -169,7 +169,7 @@ class Sci3DWindow(Screen):
         self._render_pass = RenderPass(
             [self._rt_color, self._rt_position], self._rt_depth, blit_target=self
         )
-        self._render_pass.set_clear_color(0, Color(0.3, 0.3, 0.32, 1.0))
+        self._render_pass.set_clear_color(0, Color(0.2353, 0.2353, 0.2353, 1.0))
 
         self._rt_pos_data = None
 

@@ -25,8 +25,7 @@ class MeshSurface(BasicSurface):
         super(MeshSurface, self).__init__(window, common_params)
 
         self._mesh = Mesh(
-            # TODO create public accessor
-            window._render_pass,
+            window.render_pass,
             vertices, triangles, normals, colors, self._get_projection_matrix()
         )
 

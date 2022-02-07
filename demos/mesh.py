@@ -13,7 +13,6 @@ resolution = 128j
 
 ### TODOs
 """
-Adicionar grid xz
 Disable face culling
 Scatter plot
 Resolver TODO

@@ -20,8 +20,7 @@ class Isosurface(BasicSurface):
         super(Isosurface, self).__init__(window, common_params)
 
         self._material = Material(
-            # TODO create public accessor
-            window._render_pass,
+            window.render_pass,
             'isosurface',
             'isosurface_vert.glsl',
             'isosurface_frag.glsl',
