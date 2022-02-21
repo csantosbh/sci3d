@@ -90,7 +90,12 @@ class IsosurfaceApi(BasicSurfaceApi):
     def __init__(self, window: Sci3DWindow, plot_drawer: Isosurface):
         super(IsosurfaceApi, self).__init__(window, plot_drawer)
 
-    def set_isosurface(self, volume):
+    def set_isosurface(self, volume: np.ndarray):
+        """
+        Update volumetric scalar field of 0-level set plot
+
+        :param volume: Input volume. Must be a rank 3 tensor of shape [nz, ny, nx] and float32 type TODO confirm zyx order
+        """
         if not self._window.visible():
             return
 
@@ -98,4 +103,3 @@ class IsosurfaceApi(BasicSurfaceApi):
             self._plot_drawer.set_isosurface(volume)
 
         run_in_ui_thread(impl)
-

@@ -62,14 +62,47 @@ class MeshSurface(BasicSurface):
 
 
 class MeshApi(BasicSurfaceApi):
+    _plot_drawer: MeshSurface
+
     def __init__(self, window: Sci3DWindow, plot_drawer: MeshSurface):
         super(MeshApi, self).__init__(window, plot_drawer)
 
     def set_mesh(self,
-                 triangles: Optional[np.ndarray] = None,
                  vertices: Optional[np.ndarray] = None,
-                 normals: Optional[np.ndarray] = None):
+                 triangles: Optional[np.ndarray] = None,
+                 normals: Optional[np.ndarray] = None,
+                 colors: Optional[np.ndarray] = None):
+        """
+        Modify mesh components
+
+        The number of vertices does not need to be the same as the amount when the plot was first created.
+
+        :param vertices: Rank 2 of shape [n_vertices, 3] and type float32
+        :param triangles: Rank 2 of shape [n_triangles, 3] and type uint32
+        :param normals: Rank 2 of shape [n_vertices, 3] and type float32
+        :param colors: Rank 2 of shape [n_vertices, 3] and type float32
+        """
+
+        assert (vertices.ndim == 2)
+        assert (vertices.shape[1] == 3)
+        assert (vertices.dtype == np.float32)
+
+        assert (triangles.ndim == 2)
+        assert (triangles.shape[1] == 3)
+        assert (triangles.dtype == np.uint32)
+
+        if normals is not None:
+            assert (normals.ndim == 2)
+            assert (normals.shape[0] == vertices.shape[0])
+            assert (normals.shape[1] == 3)
+            assert (normals.dtype == np.float32)
+
+        if colors is not None:
+            assert (colors.ndim == 2)
+            assert (colors.shape[1] == 3)
+            assert (colors.dtype == np.float32)
+
         def impl():
-            self._plot_drawer.mesh_object.set_mesh(triangles, vertices, normals)
+            self._plot_drawer.mesh_object.set_mesh(vertices, triangles, normals, colors)
 
         run_in_ui_thread(impl)

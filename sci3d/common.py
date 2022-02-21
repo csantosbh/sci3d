@@ -194,9 +194,10 @@ class Mesh(object):
         return self._material
 
     def set_mesh(self,
-                 triangles: Optional[np.ndarray],
                  vertices: Optional[np.ndarray],
-                 normals: Optional[np.ndarray]):
+                 triangles: Optional[np.ndarray],
+                 normals: Optional[np.ndarray],
+                 colors: Optional[np.ndarray]):
         if triangles is not None:
             self._triangle_count = triangles.shape[0]
             self._material.shader.set_buffer("indices", triangles.flatten())
@@ -208,6 +209,9 @@ class Mesh(object):
 
         if normals is not None:
             self._material.shader.set_buffer("normal", normals)
+
+        if colors is not None:
+            self._material.shader.set_buffer("color", colors)
 
     def draw(self,
              world2camera: np.ndarray,

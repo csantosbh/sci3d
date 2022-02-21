@@ -13,6 +13,9 @@ from sci3d.uithread import run_in_ui_thread
 
 @dataclass
 class Params:
+    """
+    Common scene parameters for plots
+    """
     window_title: str = 'Sci3D'
     reset_camera: bool = True
     # Shape [3, 1]

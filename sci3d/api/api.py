@@ -25,12 +25,28 @@ _current_window: Optional[Sci3DWindow] = None
 
 
 def figure():
+    """
+    Create a new empty window
+
+    Any subsequent calls to plotting functions will use the newly created window.
+    If this function is not called before a plotting function, the plot will be
+    made on the current window (or an empty window will be created, if none exists yet).
+    """
     _instantiate_window()
 
 
 def isosurface(volume: np.ndarray,
                common_params: Params = Params()
                ) -> plottypes.isosurface.IsosurfaceApi:
+    """
+    Plot the 0-level set of a volumetric scalar field
+
+    :param volume: Input volume. Must be a rank 3 tensor of shape [nz, ny, nx] and float32 type TODO confirm zyx order
+    :param common_params: Control light, camera, transforms etc. See Params for details
+    :return: Object that allows updating the plot
+    """
+    assert(volume.ndim == 3)
+
     api_object = _add_surface_to_window(
         _current_window,
         plottypes.isosurface.IsosurfaceApi,
@@ -48,6 +64,18 @@ def mesh(vertices: np.ndarray,
          colors: Optional[np.ndarray] = None,
          common_params: Params = Params()
          ) -> plottypes.mesh.MeshApi:
+    """
+    Plot triangular 3D mesh
+
+    Face culling is enabled, and therefore faces rendered in counter-clockwise order are not visible.
+
+    :param vertices: Rank 2 of shape [n_vertices, 3] and type float32
+    :param triangles: Rank 2 of shape [n_triangles, 3] and type uint32
+    :param normals: Rank 2 of shape [n_vertices, 3] and type float32
+    :param colors: Rank 2 of shape [n_vertices, 3] and type float32
+    :param common_params: Control light, camera, transforms etc. See Params for details.
+    :return: Object that allows updating the plot
+    """
     assert(vertices.ndim == 2)
     assert(vertices.shape[1] == 3)
     assert(vertices.dtype == np.float32)
@@ -58,6 +86,7 @@ def mesh(vertices: np.ndarray,
 
     if normals is not None:
         assert(normals.ndim == 2)
+        assert(normals.shape[0] == vertices.shape[0])
         assert(normals.shape[1] == 3)
         assert(normals.dtype == np.float32)
 
@@ -80,11 +109,22 @@ def mesh(vertices: np.ndarray,
     return api_object
 
 
-def get_window_count():
+def get_window_count() -> int:
+    """
+    Get number of windows currently opened
+
+    This can be useful for looping while windows are open.
+    :return: Number of windows open
+    """
     return nanogui.get_visible_window_count()
 
 
 def shutdown():
+    """
+    Request the application main loop to terminate
+
+    Under the hood, this calls nanogui.leave
+    """
     finished = False
 
     def _shutdown_impl():
