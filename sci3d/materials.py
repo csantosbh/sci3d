@@ -2,9 +2,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 from dataclasses import dataclass
 
-from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
-    Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
-    Matrix4f
+from nanogui_sci3d import RenderPass, Shader
 
 
 class Material(object):

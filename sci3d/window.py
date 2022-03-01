@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import nanogui
+import nanogui_sci3d
 import numpy as np
 from typing import List
 
@@ -8,7 +8,7 @@ from sci3d.tooltip import Tooltip
 import sci3d.common as common
 from sci3d.api.basicsurface import BasicSurface, Params
 
-from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
+from nanogui_sci3d import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
     Alignment, Orientation, RenderPass, Shader, Texture, Texture3D,\
     Matrix4f, glfw, icons
 
@@ -178,7 +178,7 @@ class Sci3DWindow(Screen):
         self._grid = Grid(self)
 
         # We currently only support opengl
-        assert(nanogui.api == 'opengl')
+        assert(nanogui_sci3d.api == 'opengl')
 
     def add_plot_drawer(self,
                         plot_drawer: BasicSurface,

@@ -2,7 +2,7 @@ import time
 from dataclasses import dataclass
 from typing import Union, Type, Optional, List, Dict
 
-import nanogui
+import nanogui_sci3d
 import numpy as np
 
 import sci3d.plottypes as plottypes
@@ -46,6 +46,9 @@ def isosurface(volume: np.ndarray,
     :return: Object that allows updating the plot
     """
     assert(volume.ndim == 3)
+    assert (volume.dtype == np.float32)
+    # TODO: Currently we only support cube volumes
+    assert (volume.shape[0] == volume.shape[1] == volume.shape[2])
 
     api_object = _add_surface_to_window(
         _current_window,
@@ -116,7 +119,7 @@ def get_window_count() -> int:
     This can be useful for looping while windows are open.
     :return: Number of windows open
     """
-    return nanogui.get_visible_window_count()
+    return nanogui_sci3d.get_visible_window_count()
 
 
 def shutdown():
@@ -128,13 +131,13 @@ def shutdown():
     finished = False
 
     def _shutdown_impl():
-        nanogui.leave()
+        nanogui_sci3d.leave()
 
         nonlocal finished
         finished = True
 
     _lock.acquire()
-    nanogui.call_async(_shutdown_impl)
+    nanogui_sci3d.call_async(_shutdown_impl)
     while not finished:
         time.sleep(0.1)
     _lock.release()
@@ -158,7 +161,7 @@ def _instantiate_window() -> Sci3DWindow:
         finished = True
 
     _lock.acquire()
-    nanogui.call_async(async_impl)
+    nanogui_sci3d.call_async(async_impl)
 
     while not finished:
         time.sleep(0.1)
@@ -197,7 +200,7 @@ def _add_surface_to_window(target_window: Sci3DWindow,
         finished = True
 
     _lock.acquire()
-    nanogui.call_async(async_impl)
+    nanogui_sci3d.call_async(async_impl)
     while not finished:
         time.sleep(0.1)
     _lock.release()
