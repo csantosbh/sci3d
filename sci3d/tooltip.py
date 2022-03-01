@@ -1,5 +1,5 @@
 import numpy as np
-from nanogui import icons, Color
+from nanogui_sci3d import icons, Color
 
 
 class Tooltip(object):

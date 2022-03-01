@@ -1,9 +1,7 @@
 from pathlib import Path
 
 import numpy as np
-from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
-    Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
-    Matrix4f
+from nanogui_sci3d import Shader, Texture, Texture3D, Matrix4f
 
 from sci3d.window import Sci3DWindow
 from sci3d.uithread import run_in_ui_thread
@@ -96,6 +94,11 @@ class IsosurfaceApi(BasicSurfaceApi):
 
         :param volume: Input volume. Must be a rank 3 tensor of shape [nz, ny, nx] and float32 type TODO confirm zyx order
         """
+        assert(volume.ndim == 3)
+        assert(volume.dtype == np.float32)
+        # TODO: Currently we only support cube volumes
+        assert(volume.shape[0] == volume.shape[1] == volume.shape[2])
+
         if not self._window.visible():
             return
 

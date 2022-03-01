@@ -4,8 +4,6 @@ from typing import Optional
 import numpy as np
 from dataclasses import dataclass
 
-from nanogui import Shader
-
 import sci3d.common as common
 import sci3d.materials as materials
 from sci3d.uithread import run_in_ui_thread

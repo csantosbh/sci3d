@@ -1,10 +1,5 @@
-from pathlib import Path
-from typing import Dict, Tuple
-from dataclasses import dataclass
-
-from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
-    Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
-    Matrix4f
+from nanogui_sci3d import RenderPass, Shader
+from pkg_resources import resource_stream
 
 
 class Material(object):
@@ -13,13 +8,8 @@ class Material(object):
                  name: str,
                  vertex_shader_file: str,
                  frag_shader_file: str):
-        curr_path = Path(__file__).parent.resolve() / 'plottypes/shaders'
-
-        with open(curr_path / vertex_shader_file) as f:
-            vertex_shader = f.read()
-
-        with open(curr_path / frag_shader_file) as f:
-            fragment_shader = f.read()
+        vertex_shader = resource_stream('sci3d', f'plottypes/shaders/{vertex_shader_file}').read()
+        fragment_shader = resource_stream('sci3d', f'plottypes/shaders/{frag_shader_file}').read()
 
         self._shader = Shader(
             render_pass,

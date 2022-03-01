@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nanogui import Shader
+from nanogui_sci3d import Shader
 
 from sci3d.materials import Material
 

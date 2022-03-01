@@ -10,7 +10,6 @@ in vec3 color;
 
 out vec4 position_world;
 out vec4 position_clip;
-out vec4 gl_Position;
 out vec3 normal_world;
 out vec3 color_vert;
 

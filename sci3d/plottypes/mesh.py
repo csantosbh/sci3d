@@ -1,5 +1,4 @@
 from typing import Optional
-from pathlib import Path
 from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
 from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi, Params
@@ -7,9 +6,6 @@ import sci3d.common as common
 import sci3d.materials as materials
 
 import numpy as np
-from nanogui import Color, Screen, Window, BoxLayout, ToolButton, Widget, \
-    Alignment, Orientation, RenderPass, Shader, Texture, Texture3D, \
-    Matrix4f
 
 from sci3d.uithread import run_in_ui_thread
 
