@@ -71,6 +71,9 @@ while s3d.get_window_count() > 0:
 
     time.sleep(dt)
     t += dt
+
+# Shutdown library
+s3d.shutdown()
 ```
 
 For more advanced examples, check the [demos](demos/).
@@ -80,3 +83,4 @@ For more advanced examples, check the [demos](demos/).
 * **Left mouse button**: Rotate camera
 * **Scroll**: Zoom
 * **wasd**: Translate camera fps style. Press **shift** to move faster.
+* **f**: Recenter scene with respect to camera
