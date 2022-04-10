@@ -130,6 +130,126 @@ def rot_z(radians: float) -> np.ndarray:
     ], dtype=np.float32)
 
 
+def sphere(radius: float):
+    num_samples = 20
+    vrange = np.mgrid[0:np.pi:num_samples*1j]
+    hrange = np.mgrid[-np.pi:np.pi:num_samples*2j]
+
+    vertices = []
+    indices = []
+    normals = []
+    uvs = []
+
+    for y0, y1 in zip(vrange[:-1], vrange[1:]):
+        for x0, x1 in zip(hrange[:-1], hrange[1:]):
+            v0 = np.array([
+                np.sin(x0) * np.sin(y0), np.cos(y0), np.cos(x0) * np.sin(y0)
+            ])
+            v1 = np.array([
+                np.sin(x0) * np.sin(y1), np.cos(y1), np.cos(x0) * np.sin(y1)
+            ])
+            v2 = np.array([
+                np.sin(x1) * np.sin(y1), np.cos(y1), np.cos(x1) * np.sin(y1)
+            ])
+            v3 = np.array([
+                np.sin(x1) * np.sin(y0), np.cos(y0), np.cos(x1) * np.sin(y0)
+            ])
+
+            uv0 = np.array([x0 * 0.5 / np.pi + 0.5, y0 / np.pi])
+            uv1 = np.array([x0 * 0.5 / np.pi + 0.5, y1 / np.pi])
+            uv2 = np.array([x1 * 0.5 / np.pi + 0.5, y1 / np.pi])
+            uv3 = np.array([x1 * 0.5 / np.pi + 0.5, y0 / np.pi])
+
+            base_idx = len(vertices)
+
+            vertices += [v0, v1, v2, v3]
+            normals += [v0, v1, v2, v3]
+            uvs += [uv0, uv1, uv2, uv3]
+
+            indices.append([base_idx + 0, base_idx + 1, base_idx + 2])
+            indices.append([base_idx + 0, base_idx + 2, base_idx + 3])
+
+    vertices = np.array(vertices, dtype=np.float32) * radius
+    indices = np.array(indices, dtype=np.uint32)
+    normals = np.array(normals, dtype=np.float32)
+    uvs = np.array(uvs, dtype=np.float32)
+
+    return vertices, indices, normals, uvs
+
+
+def sphere2(radius: float) -> Tuple[np.ndarray,
+                                   np.ndarray,
+                                   np.ndarray]:
+
+    v0 = [
+        [radius, 0, 0],   # 0
+        [-radius, 0, 0],  # 1
+        [0, radius, 0],   # 2
+        [0, -radius, 0],  # 3
+        [0, 0, radius],   # 4
+        [0, 0, -radius],  # 5
+    ]
+    t0 = [
+        [2, 4, 0],
+        [4, 2, 1],
+        [5, 2, 0],
+        [2, 5, 1],
+
+        [4, 3, 0],
+        [3, 4, 1],
+        [3, 5, 0],
+        [5, 3, 1],
+    ]
+
+    vtx_idx = dict()
+
+    def get_vtx_idx(v, vertices):
+        v = tuple(v)
+        if v not in vtx_idx:
+            vtx_idx[v] = len(vertices)
+            vertices.append(v)
+        return v, vtx_idx[v]
+
+    def recurse_sphere(vertices,
+                       triangles,
+                       depth=4):
+        refined_triangles = []
+
+        def take_mid_point(indices):
+            mid_point = np.mean(np.take(vertices, indices, axis=0), 0)
+            mid_point = mid_point / np.linalg.norm(mid_point)
+            return mid_point
+
+        for triangle in triangles:
+            a, a_idx = get_vtx_idx(take_mid_point([triangle[0], triangle[1]]), vertices)
+            b, b_idx = get_vtx_idx(take_mid_point([triangle[0], triangle[2]]), vertices)
+            c, c_idx = get_vtx_idx(take_mid_point([triangle[1], triangle[2]]), vertices)
+
+            refined_triangles += [
+                [a_idx, b_idx, triangle[0]],
+                [c_idx, a_idx, triangle[1]],
+                [b_idx, c_idx, triangle[2]],
+                [b_idx, a_idx, c_idx]
+            ]
+
+        triangles = np.array(refined_triangles, dtype=np.uint32)
+
+        if depth == 1:
+            return vertices, triangles
+        else:
+            return recurse_sphere(vertices, triangles, depth-1)
+
+    vertices, indices = recurse_sphere(v0, t0)
+    vertices = np.array(vertices, dtype=np.float32)
+    indices = np.array(indices, dtype=np.uint32)
+    normals = vertices / np.linalg.norm(vertices, axis=1, keepdims=True)
+    uv_x = np.arctan2(vertices[:, 0], vertices[:, 2]) / np.pi * 0.5 + 0.5
+    uv_y = np.arcsin(vertices[:, 1]) / np.pi + 0.5
+    uvs = np.concatenate([uv_x[:, np.newaxis], uv_y[:, np.newaxis]], 1)
+
+    return vertices, indices, normals, uvs
+
+
 def cone(radius: float,
          height: float,
          resolution: int = 10) -> Tuple[np.ndarray,
@@ -157,30 +277,38 @@ def cone(radius: float,
 class Mesh(object):
     def __init__(self,
                  render_pass, vertices, triangles, normals, colors, projection,
+                 uvs=None, material=None
                  ):
         if colors is None:
             colors = np.ones_like(vertices)
 
         if normals is None:
-            vertices, triangles, colors = self._make_triangles_unique(
-                vertices, triangles, colors
+            vertices, triangles, colors, uvs = self._make_triangles_unique(
+                vertices, triangles, colors, uvs
             )
             normals = self._compute_normals(vertices, triangles)
 
-        self._material = Material(
-            render_pass,
-            'mesh',
-            'mesh_vert.glsl',
-            'mesh_frag.glsl'
-        )
+        if material is None:
+            material = Material(
+                render_pass,
+                'mesh',
+                'mesh_vert.glsl',
+                'mesh_frag.glsl',
+                enable_texture=(uvs is not None),
+            )
+        self._material = material
         self._texture = None
 
         self._triangle_count = triangles.shape[0]
-        self._material.shader.set_buffer('indices', triangles.flatten())
-        self._material.shader.set_buffer('position', vertices)
-        self._material.shader.set_buffer('projection', projection)
-        self._material.shader.set_buffer('normal', normals)
-        self._material.shader.set_buffer('color', colors)
+
+        self._material.set_uniform('indices', triangles.flatten())
+        self._material.set_uniform('position', vertices)
+        self._material.set_uniform('projection', projection)
+        self._material.set_uniform('normal', normals)
+        self._material.set_uniform('color', colors)
+
+        if uvs is not None:
+            self._material.shader.set_buffer('uv', uvs)
 
         self._bounding_box = BoundingBox(
             np.min(vertices, axis=0),
@@ -223,7 +351,7 @@ class Mesh(object):
             self._material.shader.draw_array(
                 Shader.PrimitiveType.Triangle, 0, self._triangle_count * 3, True)
 
-    def _make_triangles_unique(self, vertices, triangles, colors):
+    def _make_triangles_unique(self, vertices, triangles, colors, uvs):
         """
         In some cases, the mesh may be specified in a way that some vertices are
         shared among multiple triangles. This function replicates these vertices
@@ -240,9 +368,12 @@ class Mesh(object):
         vertices = make_component_unique(vertices)
         colors = make_component_unique(colors)
 
+        if uvs is not None:
+            uvs = make_component_unique(uvs)
+
         triangles = np.arange(vertices.shape[0]).reshape((-1, 3)).astype(np.uint32)
 
-        return vertices, triangles, colors
+        return vertices, triangles, colors, uvs
 
     def _compute_normals(self, vertices, triangles):
         normals = []
@@ -271,7 +402,8 @@ class Wireframe(object):
             render_pass,
             'wireframe',
             'wireframe_vert.glsl',
-            'wireframe_frag.glsl'
+            'wireframe_frag.glsl',
+            enable_texture=False,
         )
         self._line_count = indices.shape[0]
         self._material.shader.set_buffer('indices', indices.flatten())

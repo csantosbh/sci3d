@@ -65,8 +65,8 @@ class BasicSurface(abc.ABC):
             light_color = np.pad(light_color, [[0, self._num_lights - light_color.shape[0]], [0, 0]])
 
         material = self.get_material()
-        material.shader.set_buffer("light_pos[0]", light_pos.flatten())
-        material.shader.set_buffer("light_color[0]", light_color.flatten())
+        material.set_uniform("light_pos[0]", light_pos.flatten())
+        material.set_uniform("light_color[0]", light_color.flatten())
 
 
 class BasicSurfaceApi(abc.ABC):
