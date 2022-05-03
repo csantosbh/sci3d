@@ -1,6 +1,5 @@
-# sci3d
-Lightweight interactive Scientific Visualization library
-<center><img src="docs/banner.jpg" width="512"/></center>
+# sci3d: Lightweight Interactive Scientific Visualization library
+<center><img src="docs/banner.jpg"/></center>
 
 ## Motivation
 This library was created to cover a set of needs not fully supplied by currently available plotting libraries. It was designed with the following goals in mind:

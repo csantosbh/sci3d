@@ -37,6 +37,15 @@ class Grid(object):
             np.full_like(vertices, 0.2784), self._projection
         )
 
+    def resize_event(self):
+        self._projection = common.get_projection_matrix(
+            near=0.1,
+            far=1e3,
+            fov=self._window.camera_fov,
+            hw_ratio=self._window.size()[1] / self._window.size()[0],
+            scale_factor=1,
+        )
+
     def draw(self):
         object2world = np.eye(4, dtype=np.float32)
         world2camera = self._window.world2camera()
@@ -90,6 +99,15 @@ class Gizmo(object):
             self._make_axis(np.eye(3, dtype=np.float32), [0, 1, 0]),
             self._make_axis(common.rot_x(np.pi / 2), [0, 0, 1]),
         ]
+
+    def resize_event(self):
+        self._projection = common.get_projection_matrix(
+            near=0.1,
+            far=1e3,
+            fov=self._window.camera_fov,
+            hw_ratio=self._window.size()[1] / self._window.size()[0],
+            scale_factor=1,
+        )
 
     def draw(self):
         width, height = self._window.size()
@@ -249,6 +267,8 @@ class Sci3DWindow(Screen):
 
         self._update_tooltip_positions()
         self._rt_pos_data = self._rt_position.download()
+        self._grid.resize_event()
+        self._gizmo.resize_event()
 
     def keyboard_event(self, key, scancode, action, modifiers):
         if super(Sci3DWindow, self).keyboard_event(key, scancode,
