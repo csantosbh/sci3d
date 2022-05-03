@@ -8,17 +8,20 @@ import numpy as np
 import sci3d.plottypes as plottypes
 import sci3d.plottypes.isosurface
 import sci3d.plottypes.mesh
+import sci3d.plottypes.spherical_heatmap
 from sci3d.api.basicsurface import BasicSurfaceApi, Params
 from sci3d.uithread import _lock
 from sci3d.window import Sci3DWindow
 
 _api_types = Union[
     plottypes.isosurface.IsosurfaceApi,
-    plottypes.mesh.MeshApi
+    plottypes.mesh.MeshApi,
+    plottypes.spherical_heatmap.SphericalHeatmapApi,
 ]
 _plot_types = Union[
     plottypes.isosurface.Isosurface,
     plottypes.mesh.MeshSurface,
+    plottypes.spherical_heatmap.SphericalHeatmapSurface,
 ]
 _figures: List[Sci3DWindow] = []
 _current_window: Optional[Sci3DWindow] = None
@@ -106,6 +109,39 @@ def mesh(vertices: np.ndarray,
              triangles=triangles,
              normals=normals,
              colors=colors),
+        common_params
+    )
+
+    return api_object
+
+
+def spherical_heatmap(points: np.ndarray,
+                      resolution: int = 128,
+                      smoothing: float = 0.1,
+                      common_params: Params = Params()
+                      ) -> plottypes.spherical_heatmap.SphericalHeatmapApi:
+    """
+    Plot heatmap of points lying on the 3D spherical surface
+
+    Points are normalized internally before the heatmap is computed.
+
+    :param points: Rank 2 of shape [n_vertices, 3] and type float32
+    :param resolution: Width, in pixels, of equirectangular texture used for spherical texture. Height is half the width.
+    :param smoothing: Standard deviation of kernel density estimation distribution. The higher, the smoother the plot.
+    :param common_params: Control light, camera, transforms etc. Currently, lighting does not affect this plot. See Params for details.
+    :return: Object that allows updating the plot
+    """
+    assert(points.ndim == 2)
+    assert(points.shape[1] == 3)
+    assert(points.dtype == np.float32)
+
+    api_object = _add_surface_to_window(
+        _current_window,
+        plottypes.spherical_heatmap.SphericalHeatmapApi,
+        plottypes.spherical_heatmap.SphericalHeatmapSurface,
+        dict(points=points,
+             resolution=resolution,
+             smoothing=smoothing),
         common_params
     )
 

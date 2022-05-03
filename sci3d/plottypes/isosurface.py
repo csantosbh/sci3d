@@ -22,6 +22,7 @@ class Isosurface(BasicSurface):
             'isosurface',
             'isosurface_vert.glsl',
             'isosurface_frag.glsl',
+            enable_texture=False
         )
         self._texture = None
 
