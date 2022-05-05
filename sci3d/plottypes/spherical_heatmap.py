@@ -1,7 +1,5 @@
 from typing import Optional
 
-import cv2
-import matplotlib.pyplot as plt
 from nanogui_sci3d import Texture, CubeMap
 from scipy.interpolate import interp1d
 

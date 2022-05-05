@@ -13,6 +13,7 @@ setup(
         'nanogui_sci3d @ git+https://github.com/csantosbh/nanogui@features/sci3d-requirements#egg=nanogui_sci3d',
         'numpy',
         'icecream',
+        'scipy'
     ],
     package_data={'sci3d': ['plottypes/shaders/*.glsl']},
     include_package_data=True,
