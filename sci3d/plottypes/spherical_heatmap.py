@@ -21,9 +21,9 @@ class SphericalHeatmapSurface(BasicSurface):
                  window: Sci3DWindow,
                  common_params: Params,
                  points: np.ndarray,
+                 scalars: Optional[np.ndarray],
                  resolution: int,
                  smoothing: float):
-        assert(points.shape[1] == 3)
         self._resolution = resolution
         self._smoothing = smoothing
         self._colormap = interp1d(np.mgrid[0:1:1j*PARULA.shape[0]], PARULA, axis=0)
@@ -37,8 +37,8 @@ class SphericalHeatmapSurface(BasicSurface):
         radius = np.cos(y_spherical)
 
         x_spherical = ((x_pix / self._resolution) * 2.0 - 1) * np.pi
-        x_cartesian = radius * np.cos(x_spherical)
-        z_cartesian = -radius * np.sin(x_spherical)
+        x_cartesian = radius * np.sin(x_spherical)
+        z_cartesian = radius * np.cos(x_spherical)
 
         self._cartesian = np.concatenate([
             x_cartesian[..., np.newaxis],
@@ -74,7 +74,7 @@ class SphericalHeatmapSurface(BasicSurface):
         self._mesh.get_material().shader.set_texture('tex_sampler', self._texture)
         self.post_init()
 
-        self.set_points(points)
+        self.set_points(points, scalars)
 
     def get_material(self) -> materials.Material:
         return self._mesh.get_material()
@@ -96,17 +96,29 @@ class SphericalHeatmapSurface(BasicSurface):
             self._get_projection_matrix()
         )
 
-    def set_points(self, points: np.ndarray):
+    def set_points(self,
+                   points: np.ndarray,
+                   scalars: Optional[np.ndarray]=None):
         points = points / np.linalg.norm(points, axis=1, keepdims=True)
+        weights = np.ones((points.shape[0], 1), dtype=np.float32) \
+            if scalars is None else scalars
 
         texture = np.zeros((self._resolution // 2, self._resolution))
+        point_density = np.full_like(texture, 1e-6)
         for y_pix in range(self._resolution // 2):
             cartesian_y = self._cartesian[y_pix, ...]
 
             # Compute geodesic distance to given points
             geodist = np.sum(cartesian_y[:, np.newaxis, :] * points[np.newaxis, :, :], axis=-1)
             geodist = np.arccos(np.clip(geodist, -1, 1))
-            texture[y_pix, :] = np.sum(np.exp(-0.5 * (geodist/self._smoothing)**2), axis=1)
+            geodist = np.exp(-0.5 * (geodist/self._smoothing)**2)
+
+            texture[y_pix, :] = np.sum(geodist * weights.T, axis=1)
+            point_density[y_pix, :] += np.sum(geodist, axis=1)
+
+        if scalars is not None:
+            # If scalars is provided, we want its average weighted by the density of points
+            texture = texture / point_density
 
         texture = (
                 (texture - np.min(texture)) / (np.max(texture) - np.min(texture))

@@ -116,6 +116,7 @@ def mesh(vertices: np.ndarray,
 
 
 def spherical_heatmap(points: np.ndarray,
+                      scalars: Optional[np.ndarray] = None,
                       resolution: int = 128,
                       smoothing: float = 0.1,
                       common_params: Params = Params()
@@ -124,8 +125,11 @@ def spherical_heatmap(points: np.ndarray,
     Plot heatmap of points lying on the 3D spherical surface
 
     Points are normalized internally before the heatmap is computed.
+    If scalars is not provided, the heatmap will show the distribution of (normalized) points in the 3D sphere.
+    Otherwise, the heatmap will contain the distribution of the scalars averaged by the density of points.
 
     :param points: Rank 2 of shape [n_vertices, 3] and type float32
+    :param scalars: Rank 2 of shape [n_vertices, 1] and type float32
     :param resolution: Width, in pixels, of equirectangular texture used for spherical texture. Height is half the width.
     :param smoothing: Standard deviation of kernel density estimation distribution. The higher, the smoother the plot.
     :param common_params: Control light, camera, transforms etc. Currently, lighting does not affect this plot. See Params for details.
@@ -135,11 +139,17 @@ def spherical_heatmap(points: np.ndarray,
     assert(points.shape[1] == 3)
     assert(points.dtype == np.float32)
 
+    if scalars is not None:
+        assert(scalars.ndim == 2)
+        assert(scalars.shape[1] == 1)
+        assert(scalars.dtype == np.float32)
+
     api_object = _add_surface_to_window(
         _current_window,
         plottypes.spherical_heatmap.SphericalHeatmapApi,
         plottypes.spherical_heatmap.SphericalHeatmapSurface,
         dict(points=points,
+             scalars=scalars,
              resolution=resolution,
              smoothing=smoothing),
         common_params
