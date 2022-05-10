@@ -77,6 +77,14 @@ s3d.shutdown()
 
 For more advanced examples, check the [demos](demos/).
 
+## Features
+
+|               |              |               |
+|:-------------:|:------------:|:-------------:|
+| ![](docs/sdf.jpg)  | ![](docs/mesh.jpg) | ![](docs/spherical_heatmap.jpg) |
+| Signed Distance Functions (level set)  |  Polygon Mesh | Spherical Heatmap |
+|               |              |               |
+
 ## Controls
 
 * **Left mouse button**: Rotate camera
