@@ -3,7 +3,7 @@ from typing import Optional
 from nanogui_sci3d import Texture, CubeMap
 from scipy.interpolate import interp1d
 
-from sci3d.colormaps import PARULA
+from sci3d.colormaps import COOLWARM
 from sci3d.window import Sci3DWindow
 from sci3d.common import get_projection_matrix, Mesh
 from sci3d.api.basicsurface import BasicSurface, BasicSurfaceApi, Params
@@ -26,7 +26,7 @@ class SphericalHeatmapSurface(BasicSurface):
                  smoothing: float):
         self._resolution = resolution
         self._smoothing = smoothing
-        self._colormap = interp1d(np.mgrid[0:1:1j*PARULA.shape[0]], PARULA, axis=0)
+        self._colormap = interp1d(np.mgrid[0:1:1j*COOLWARM.shape[0]], COOLWARM, axis=0)
 
         # Convert from pixel coords to spherical
         # Then, from spherical coords to cartesian coords
