@@ -36,6 +36,17 @@ indices = np.array([
     [4, 7, 0],
 ], dtype=np.uint32)
 
+def loadobj(path):
+    with open(path, 'r') as f:
+        obj = f.readlines()
+    v=np.array([[float(i) for i in v[2:].split(' ')] for v in obj if v[0]=='v']).astype(np.float32)
+    i=np.array([[int(i)-1 for i in v[2:].split(' ')] for v in obj if v[0]=='f']).astype(np.uint32)
+    ic(i)
+    return v, i
+
+import icecream
+icecream.install()
+vertices, indices = loadobj('/home/claudio/Downloads/FLAME2020/flame.obj')
 # Create mesh. Note the usage of the optional position/rotation fields
 fig = s3d.mesh(vertices, indices, common_params=s3d.Params(
     object_position=np.array([[0, 0, -1]], dtype=np.float32).T,
